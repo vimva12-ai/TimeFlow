@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>오프라인 — TimeFlow</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background: #f9fafb;
+      color: #374151;
+    }
+    .container { text-align: center; padding: 2rem; }
+    h1 { font-size: 1.5rem; font-weight: 700; color: #2563eb; margin-bottom: 0.5rem; }
+    p { color: #6b7280; }
+    button {
+      margin-top: 1rem;
+      padding: 0.5rem 1.5rem;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>TimeFlow</h1>
+    <p>현재 오프라인 상태입니다.<br/>인터넷 연결 후 다시 시도해 주세요.</p>
+    <button onclick="location.reload()">다시 시도</button>
+  </div>
+</body>
+</html>

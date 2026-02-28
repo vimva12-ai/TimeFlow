@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+/* Tailwind v4: .dark 클래스 기반 다크모드 활성화 */
+@variant dark (&:where(.dark, .dark *));
+
+/* ── 색상 변수 ─────────────────────────────────────────────── */
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+
+  /* 슬롯 상태 색상 */
+  --slot-planned-bg:  #eff6ff;
+  --slot-planned-border: #3b82f6;
+  --slot-done-bg:    #f0fdf4;
+  --slot-done-border: #22c55e;
+  --slot-partial-bg: #fff7ed;
+  --slot-partial-border: #f97316;
+  --slot-skipped-bg: #f9fafb;
+  --slot-skipped-border: #9ca3af;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* ── 다크 모드 (시스템) ────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+
+    --slot-planned-bg:  rgba(59, 130, 246, 0.15);
+    --slot-planned-border: #60a5fa;
+    --slot-done-bg:    rgba(34, 197, 94, 0.15);
+    --slot-done-border: #4ade80;
+    --slot-partial-bg: rgba(249, 115, 22, 0.15);
+    --slot-partial-border: #fb923c;
+    --slot-skipped-bg: rgba(156, 163, 175, 0.1);
+    --slot-skipped-border: #6b7280;
+  }
+}
+
+/* ── 수동 다크 모드 클래스 ─────────────────────────────────── */
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+
+  --slot-planned-bg:  rgba(59, 130, 246, 0.15);
+  --slot-planned-border: #60a5fa;
+  --slot-done-bg:    rgba(34, 197, 94, 0.15);
+  --slot-done-border: #4ade80;
+  --slot-partial-bg: rgba(249, 115, 22, 0.15);
+  --slot-partial-border: #fb923c;
+  --slot-skipped-bg: rgba(156, 163, 175, 0.1);
+  --slot-skipped-border: #6b7280;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans, Arial, Helvetica, sans-serif);
+}
+
+/* 스크롤바 숨기기 (DatePicker 등) */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* 슬롯 높이 고정 (CLS 방지) */
+[data-slot-row] { height: 48px; }

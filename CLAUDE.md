@@ -58,10 +58,10 @@ Firestore collection hierarchy:
 users/{uid}/daily_plans/{planId}/time_slots/{slotId}/actual_logs/{logId}
 ```
 
-- **`daily_plans`** — doc ID = `{uid}_{date}` (deterministic). Created on first access via `setDoc(..., { merge: true })`.
+- **`daily_plans`** — doc ID = `{uid}_{date}` (deterministic). Created on first access with `getDoc` check first — only `setDoc` if not exists (avoids repeated writes on refetch).
 - **`time_slots`** — stores `uid` (for Collection Group queries) and `planId` fields.
 - **`actual_logs`** — subcollection of each slot; stores real start/end times.
-- **`templates`** — `users/{uid}/templates/{id}`: `slots_json` array of `{ title, offsetMinutes, durationMinutes, sort_order }`.
+- **`templates`** — `users/{uid}/templates/{id}`: `name` string + `slots_json` array of `{ title, offsetMinutes, durationMinutes, sort_order }`.
 - **`push_subscriptions`** — `users/{uid}/push_subscriptions/{endpointHash}`.
 
 All types are in `src/types/database.ts`. Key composites: `DailyPlanWithSlots`, `TimeSlotWithLogs`.
@@ -109,15 +109,27 @@ The grid is built from three components working together:
   - **Column click detection**: `onClick` on the PLAN and ACTUAL column containers uses `getTimeFromClick()` — calculates row from `e.clientY - e.currentTarget.getBoundingClientRect().top` (scroll-safe). Clicks on existing slots are ignored via `(e.target as Element).closest('[data-slot]')`.
   - Props: `planColumn`, `actualColumn`, `onAddPlan?`, `onAddActual?`, `onPlanCellClick?(h,m)`, `onActualCellClick?(h,m)`.
 
-- **`PlanColumn.tsx`** — renders planned slot buttons with `data-slot="true"`. On click → `setEditingSlotId(slot.id)` (opens SlotEditModal). Reads grid settings from store.
+- **`PlanColumn.tsx`** — renders planned slot buttons with `data-slot="true"`. On click → `setEditingSlotId(slot.id)` (opens SlotEditModal). Props: `slots`, `planId`, `date`.
 
-- **`ActualColumn.tsx`** — renders actual slot containers with `data-slot="true"`. Shows start/complete/result UI depending on `actual_logs` state.
+- **`ActualColumn.tsx`** — renders actual slot containers with `data-slot="true"`. Props: `slots`, `onStart`, `onComplete`, `onChangeStatus`.
+  - **Three display modes** based on slot state and height:
+    1. **Not started**: Play button → calls `onStart(slotId)`
+    2. **In-progress, height ≥ `ACTION_THRESHOLD` (60px)**: inline 완료/부분/건너뜀 buttons → calls `onComplete(slotId, status, new Date().toISOString())`
+    3. **In-progress, height < 60px**: compact `▶ HH:mm` button → tap opens right-side portal popup
+  - **Completed slots**: click anywhere → opens right-side portal popup with 완료/부분/건너뜀 → calls `onChangeStatus(slotId, status)` (status-only update, no new log)
+  - **Popup** uses `createPortal` to `document.body` with `position: fixed` — necessary to escape the scroll container's `overflow-y: auto` clipping. Position calculated from `e.currentTarget.getBoundingClientRect()`.
 
 ### Modal Architecture
 
 - **`AddSlotModal.tsx`** — Radix UI Dialog (portal-based, always centered regardless of scroll). Used for both PLAN and ACTUAL entry creation. Accepts `initialHour?` and `initialMin?` to pre-fill from cell clicks. Timestamp creation: `new Date(`${date}T${HH}:${mm}:00`).toISOString()` (local time → UTC).
 
 - **`SlotEditModal.tsx`** — Radix UI Dialog for editing/deleting existing slots. Triggered by `editingSlotId` in timetableStore.
+
+- **`TemplateDrawer.tsx`** — Radix UI Dialog (bottom sheet on mobile, side panel on desktop). Save current plan slots as a named template, apply/delete saved templates. Uses `useTemplates` hook; `applyTemplate` writes slots to the selected date using `offsetMinutes` + `durationMinutes` from `slots_json`.
+
+### Additional UI Components
+
+- **`PomodoroTimer.tsx`** — fixed-position widget (bottom-right). Pure client state via `useReducer`. Phases: focus(25min) → break(5min), every 4th break becomes long-break(15min). Sends browser `Notification` when each phase ends (requires `Notification.permission === 'granted'`).
 
 ### Dark Mode
 
@@ -143,6 +155,15 @@ Requires **Collection Group Composite Index**: collection `time_slots`, fields `
 
 Generate VAPID keys: `npx web-push generate-vapid-keys`
 
+### Deployment
+
+Deployed on **Vercel** (Hobby plan). Firebase Hosting is not used — SSR requires the Blaze (paid) plan for Cloud Functions.
+
+- Vercel project: `timeflow` under `vimva12-2168s-projects`
+- Production URL: https://timeflow-nine-mu.vercel.app
+- Cron jobs are **not available** on Hobby plan (push notification cron at `/api/cron/notify` exists in code but is not scheduled via Vercel)
+- After adding env vars: `vercel env add KEY production` or use the Vercel dashboard
+
 ### Environment Variables
 
 ```
@@ -165,6 +186,8 @@ NEXT_PUBLIC_VAPID_PUBLIC_KEY
 VAPID_PRIVATE_KEY
 CRON_SECRET
 ```
+
+When adding a new authorized domain for Firebase Auth (e.g., new deployment URL), add it in Firebase Console → Authentication → Settings → Authorized domains.
 
 ### UI Conventions
 

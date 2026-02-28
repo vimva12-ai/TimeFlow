@@ -178,6 +178,7 @@ export default function TodayPage() {
               slots={plan.time_slots}
               onStart={handleStart}
               onComplete={handleComplete}
+              onChangeStatus={(slotId, status) => updateSlotStatus.mutate({ slotId, status })}
             />
           ) : null
         }

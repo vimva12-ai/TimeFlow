@@ -1,7 +1,4 @@
 {
-  "crons": [
-    { "path": "/api/cron/notify", "schedule": "0,30 * * * *" }
-  ],
   "headers": [
     {
       "source": "/sw.js",

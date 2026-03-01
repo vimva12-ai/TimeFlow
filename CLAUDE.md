@@ -209,6 +209,14 @@ Deployed on **Vercel** (Hobby plan). Firebase Hosting is not used — SSR requir
 - Cron jobs are **not available** on Hobby plan (push notification cron at `/api/cron/notify` exists in code but is not scheduled via Vercel)
 - After adding env vars: `vercel env add KEY production` or use the Vercel dashboard
 
+### Firebase Analytics
+
+- **`src/lib/firebase/client.ts`** — exports `getAnalyticsInstance()`: lazy, browser-only getter (returns `null` on SSR or when `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` is unset).
+- **`src/lib/analytics.ts`** — thin wrapper around `logEvent`. Import `analytics` and call named helpers: `analytics.login(method)`, `analytics.pageView(path, title)`, `analytics.slotCreated(type)`, `analytics.slotStatusChanged(status)`, `analytics.timerStarted(phase)`, `analytics.timerCompleted(phase)`.
+- **`src/components/AnalyticsInit.tsx`** — client component mounted in `Providers`. Initializes Analytics on first render and fires `page_view` on every route change via `usePathname`.
+
+Adding a new tracked event: call `logEvent` inside `analytics.ts` and add a named helper. No changes to `client.ts` needed.
+
 ### Environment Variables
 
 ```
@@ -219,6 +227,7 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
 NEXT_PUBLIC_FIREBASE_APP_ID
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID   # G-XXXXXXXXXX — Analytics disabled if unset
 
 # Firebase Admin SDK (server-only)
 FIREBASE_PROJECT_ID

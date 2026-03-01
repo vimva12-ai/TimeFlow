@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { I18nProvider } from '@/lib/i18n';
+import AnalyticsInit from '@/components/AnalyticsInit';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -19,7 +20,10 @@ export default function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <I18nProvider>{children}</I18nProvider>
+      <I18nProvider>
+        <AnalyticsInit />
+        {children}
+      </I18nProvider>
     </QueryClientProvider>
   );
 }

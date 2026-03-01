@@ -2,7 +2,7 @@
   "name": "TimeFlow",
   "short_name": "TimeFlow",
   "description": "Plan vs Actual 타임 트래커",
-  "start_url": "/app/today",
+  "start_url": "/today",
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#2563EB",

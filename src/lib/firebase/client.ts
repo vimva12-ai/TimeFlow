@@ -1,6 +1,7 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getAnalytics, type Analytics } from 'firebase/analytics';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -9,11 +10,22 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+let _analytics: Analytics | null = null;
+
+/** 브라우저 환경에서만 Analytics 인스턴스를 반환 (SSR 안전) */
+export function getAnalyticsInstance(): Analytics | null {
+  if (typeof window === 'undefined') return null;
+  if (!process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID) return null;
+  if (!_analytics) _analytics = getAnalytics(app);
+  return _analytics;
+}
 
 /** auth.currentUser가 로드될 때까지 기다린 뒤 User를 반환 */
 export function getAuthUser(): Promise<User | null> {

@@ -16,12 +16,14 @@ interface SlotEditModalProps {
 
 export default function SlotEditModal({ slots, date }: SlotEditModalProps) {
   const { editingSlotId, setEditingSlotId } = useTimetableStore();
-  const { updateSlotStatus, updateSlotTitle, deleteSlot } = useSlotMutations(date);
+  const { updateSlotStatus, updateSlotTitle, deleteSlot, updateSlotTime } = useSlotMutations(date);
   const { t } = useI18n();
 
   const slot = slots.find((s) => s.id === editingSlotId) ?? null;
   const [title, setTitle] = useState('');
   const [status, setStatus] = useState<SlotStatus>('planned');
+  const [startVal, setStartVal] = useState('');
+  const [endVal, setEndVal] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const STATUS_OPTIONS: { value: SlotStatus; label: string }[] = [
@@ -35,6 +37,8 @@ export default function SlotEditModal({ slots, date }: SlotEditModalProps) {
     if (slot) {
       setTitle(slot.title);
       setStatus(slot.status);
+      setStartVal(format(parseISO(slot.start_at), 'HH:mm'));
+      setEndVal(format(parseISO(slot.end_at), 'HH:mm'));
       setConfirmDelete(false);
     }
   }, [slot]);
@@ -43,6 +47,16 @@ export default function SlotEditModal({ slots, date }: SlotEditModalProps) {
     if (!slot) return;
     if (title !== slot.title) updateSlotTitle.mutate({ slotId: slot.id, title });
     if (status !== slot.status) updateSlotStatus.mutate({ slotId: slot.id, status });
+    const origStart = format(parseISO(slot.start_at), 'HH:mm');
+    const origEnd = format(parseISO(slot.end_at), 'HH:mm');
+    if ((startVal && endVal) && (startVal !== origStart || endVal !== origEnd)) {
+      const d = slot.start_at.slice(0, 10);
+      updateSlotTime.mutate({
+        slotId: slot.id,
+        start_at: new Date(`${d}T${startVal}:00`).toISOString(),
+        end_at: new Date(`${d}T${endVal}:00`).toISOString(),
+      });
+    }
     setEditingSlotId(null);
   }
 
@@ -73,8 +87,23 @@ export default function SlotEditModal({ slots, date }: SlotEditModalProps) {
 
           {slot && (
             <div className="space-y-4">
-              <div className="text-sm text-gray-500 dark:text-gray-400">
-                {format(parseISO(slot.start_at), 'HH:mm')} – {format(parseISO(slot.end_at), 'HH:mm')}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.timeRange}</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="time"
+                    value={startVal}
+                    onChange={(e) => setStartVal(e.target.value)}
+                    className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-gray-400 shrink-0">–</span>
+                  <input
+                    type="time"
+                    value={endVal}
+                    onChange={(e) => setEndVal(e.target.value)}
+                    className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
 
               <div>

@@ -16,6 +16,7 @@ interface ActualColumnProps {
   onChangeStatus: (slotId: string, status: SlotStatus) => void;
   onUpdateLog?: (slotId: string, logId: string, actualStart: string, actualEnd: string) => void;
   onMoveSlot?: (slotId: string, newStart: string, newEnd: string) => void;
+  onUpdateSlotTime?: (slotId: string, newStart: string, newEnd: string) => void;
 }
 
 function punctualityLabel(plannedStart: string, actualStart: string): string {
@@ -44,7 +45,7 @@ const LONG_PRESS_MS = 300;
 const CANCEL_MOVE_PX = 10;
 
 type PopupState = { slotId: string; type: 'progress' | 'edit'; x: number; y: number } | null;
-type EditTimeState = { slotId: string; logId: string; startVal: string; endVal: string; date: string } | null;
+type EditTimeState = { slotId: string; logId?: string; startVal: string; endVal: string; date: string; mode: 'slot' | 'log' } | null;
 type PauseMap = Record<string, string>;
 
 interface DragData {
@@ -55,7 +56,7 @@ interface DragData {
   dateStr: string;
 }
 
-export default function ActualColumn({ slots, onStart, onComplete, onChangeStatus, onUpdateLog, onMoveSlot }: ActualColumnProps) {
+export default function ActualColumn({ slots, onStart, onComplete, onChangeStatus, onUpdateLog, onMoveSlot, onUpdateSlotTime }: ActualColumnProps) {
   const { startHour, endHour, slotHeight } = useTimetableStore();
   const totalSlots = ((endHour - startHour) * 60) / SLOT_MINUTES;
   const columnRef = useRef<HTMLDivElement>(null);
@@ -205,7 +206,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
     setPopup(null);
   }
 
-  function openEditTime(e: React.MouseEvent, slot: TimeSlotWithLogs) {
+  function openLogTimeEdit(e: React.MouseEvent, slot: TimeSlotWithLogs) {
     e.stopPropagation();
     const log = slot.actual_logs[0];
     if (!log) return;
@@ -214,15 +215,34 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
       startVal: log.actual_start ? format(parseISO(log.actual_start), 'HH:mm') : '',
       endVal: log.actual_end ? format(parseISO(log.actual_end), 'HH:mm') : '',
       date: slot.start_at.slice(0, 10),
+      mode: 'log',
+    });
+    setPopup(null);
+  }
+
+  function openSlotTimeEdit(e: React.MouseEvent | React.PointerEvent, slot: TimeSlotWithLogs) {
+    e.stopPropagation();
+    setEditTime({
+      slotId: slot.id,
+      startVal: format(parseISO(slot.start_at), 'HH:mm'),
+      endVal: format(parseISO(slot.end_at), 'HH:mm'),
+      date: slot.start_at.slice(0, 10),
+      mode: 'slot',
     });
     setPopup(null);
   }
 
   function handleSaveTime() {
-    if (!editTime || !onUpdateLog) return;
-    const { slotId, logId, startVal, endVal, date } = editTime;
+    if (!editTime) return;
+    const { slotId, startVal, endVal, date } = editTime;
     if (!startVal || !endVal) return;
-    onUpdateLog(slotId, logId, new Date(`${date}T${startVal}:00`).toISOString(), new Date(`${date}T${endVal}:00`).toISOString());
+    const newStart = new Date(`${date}T${startVal}:00`).toISOString();
+    const newEnd = new Date(`${date}T${endVal}:00`).toISOString();
+    if (editTime.mode === 'log' && editTime.logId && onUpdateLog) {
+      onUpdateLog(slotId, editTime.logId, newStart, newEnd);
+    } else if (editTime.mode === 'slot' && onUpdateSlotTime) {
+      onUpdateSlotTime(slotId, newStart, newEnd);
+    }
     setEditTime(null);
   }
 
@@ -265,13 +285,23 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
             onPointerCancel={canDrag ? handlePointerCancel : undefined}
           >
             {!hasStarted ? (
-              <button
-                onClick={() => onStart(slot.id)}
-                className="w-full h-full flex items-center justify-center gap-1 text-[11px] text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-              >
-                <Play className="w-3 h-3 shrink-0" />
-                {height >= 32 ? '시작' : ''}
-              </button>
+              <div className="relative w-full h-full">
+                <button
+                  onClick={() => onStart(slot.id)}
+                  className="w-full h-full flex items-center justify-center gap-1 text-[11px] text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                >
+                  <Play className="w-3 h-3 shrink-0" />
+                  {height >= 32 ? '시작' : ''}
+                </button>
+                {height >= 28 && (
+                  <button
+                    onClick={(e) => openSlotTimeEdit(e, slot)}
+                    className="absolute top-0.5 right-0.5 p-0.5 rounded text-gray-300 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <Clock className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             ) : showInline ? (
               <div className={clsx('flex flex-col h-full p-0.5 gap-0.5', isPaused ? 'bg-yellow-50/80 dark:bg-yellow-900/20' : 'bg-blue-50/80 dark:bg-blue-900/20')}>
                 <div className={clsx('text-[9px] font-semibold leading-tight px-0.5 flex items-center gap-0.5 pointer-events-none', isPaused ? 'text-yellow-600 dark:text-yellow-400' : 'text-blue-600 dark:text-blue-400')}>
@@ -296,6 +326,9 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
                   </button>
                   <button onClick={() => handleComplete(slot.id, 'skipped')} className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300 hover:opacity-80">
                     <SkipForward className="w-2 h-2" />건너뜀
+                  </button>
+                  <button onClick={(e) => openSlotTimeEdit(e, slot)} className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-gray-700/50 dark:text-gray-400 hover:opacity-80">
+                    <Clock className="w-2 h-2" />시간
                   </button>
                 </div>
               </div>
@@ -379,6 +412,10 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
               <button onClick={() => handleComplete(popupSlot.id, 'skipped')} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300 hover:opacity-80">
                 <SkipForward className="w-3 h-3 shrink-0" />건너뜀
               </button>
+              <div className="border-t border-gray-200 dark:border-gray-600 my-0.5" />
+              <button onClick={(e) => openSlotTimeEdit(e, popupSlot)} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 hover:opacity-80">
+                <Clock className="w-3 h-3 shrink-0" />시간 수정
+              </button>
             </>
           ) : (
             <>
@@ -394,7 +431,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
               {onUpdateLog && popupSlot.actual_logs[0] && (
                 <>
                   <div className="border-t border-gray-200 dark:border-gray-600 my-0.5" />
-                  <button onClick={(e) => openEditTime(e, popupSlot)} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 hover:opacity-80">
+                  <button onClick={(e) => openLogTimeEdit(e, popupSlot)} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 hover:opacity-80">
                     <Clock className="w-3 h-3 shrink-0" />시간 수정
                   </button>
                 </>
@@ -413,7 +450,9 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
           className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-2xl p-4 w-64"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3">실제 시간 수정</div>
+          <div className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3">
+            {editTime?.mode === 'log' ? '실제 시간 수정' : '시간 범위 수정'}
+          </div>
           <div className="space-y-3">
             <div>
               <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">시작 시간</label>

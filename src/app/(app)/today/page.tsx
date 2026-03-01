@@ -187,6 +187,9 @@ export default function TodayPage() {
               onUpdateLog={(slotId, logId, actualStart, actualEnd) =>
                 updateActualLog.mutate({ slotId, logId, actual_start: actualStart, actual_end: actualEnd })
               }
+              onUpdateSlotTime={(slotId, newStart, newEnd) =>
+                updateSlotTime.mutate({ slotId, start_at: newStart, end_at: newEnd })
+              }
               onMoveSlot={(slotId, newStart, newEnd) => {
                 // ACTUAL drag routing:
                 // - Completed slots: update actual_log times (ACTUAL display only)

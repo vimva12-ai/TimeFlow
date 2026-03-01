@@ -5,6 +5,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { addMinutes, format } from 'date-fns';
 import { useTimetableStore } from '@/store/timetableStore';
+import { useI18n } from '@/lib/i18n';
 
 interface AddSlotModalProps {
   type: 'plan' | 'actual';
@@ -27,6 +28,7 @@ export default function AddSlotModal({
   initialHour, initialMin,
 }: AddSlotModalProps) {
   const { startHour } = useTimetableStore();
+  const { t } = useI18n();
 
   const now = new Date();
   const [title, setTitle] = useState('');
@@ -36,7 +38,6 @@ export default function AddSlotModal({
   const [endMin, setEndMin] = useState(now.getMinutes() < 30 ? 30 : 0);
   const [duration, setDuration] = useState(60);
 
-  // 모달 열릴 때 초기화 — 클릭된 시각이 있으면 우선 사용
   useEffect(() => {
     if (open) {
       const h = initialHour ?? new Date().getHours();
@@ -72,6 +73,10 @@ export default function AddSlotModal({
     return e > s ? e - s : 0;
   })();
 
+  // suppress unused variable warning
+  void startHour;
+  void slotCount;
+
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
@@ -80,10 +85,9 @@ export default function AddSlotModal({
           className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-5 focus:outline-none"
           aria-describedby={undefined}
         >
-          {/* 헤더 */}
           <div className="flex items-center justify-between mb-4">
             <Dialog.Title className="text-base font-semibold text-gray-900 dark:text-gray-100">
-              {isPlan ? 'PLAN 일정 추가' : 'ACTUAL 기록 추가'}
+              {isPlan ? t.addPlanTitle : t.addActualTitle}
             </Dialog.Title>
             <Dialog.Close asChild>
               <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
@@ -93,25 +97,23 @@ export default function AddSlotModal({
           </div>
 
           <div className="space-y-3">
-            {/* 제목 */}
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                {isPlan ? '할 일' : '활동명'}
+                {isPlan ? t.taskLabel : t.activityLabel}
               </label>
               <input
                 autoFocus
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                placeholder={isPlan ? '할 일을 입력하세요' : '무엇을 했나요?'}
+                placeholder={isPlan ? t.taskPlaceholder : t.activityPlaceholder}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
-            {/* 시작 시간 */}
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                시작 시간
+                {t.startTime}
               </label>
               <div className="flex gap-2">
                 <select
@@ -134,11 +136,10 @@ export default function AddSlotModal({
               </div>
             </div>
 
-            {/* 종료 시간 (actual) 또는 지속 시간 (plan) */}
             {isPlan ? (
               <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                  지속 시간
+                  {t.durationLabel}
                 </label>
                 <div className="grid grid-cols-3 gap-1.5">
                   {[30, 60, 90, 120, 150, 180].map((m) => (
@@ -159,7 +160,7 @@ export default function AddSlotModal({
             ) : (
               <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                  종료 시간
+                  {t.endTime}
                 </label>
                 <div className="flex gap-2">
                   <select
@@ -183,7 +184,6 @@ export default function AddSlotModal({
               </div>
             )}
 
-            {/* 미리보기 */}
             {totalMin > 0 && (
               <p className="text-[11px] text-gray-400 dark:text-gray-500">
                 {String(startHourVal).padStart(2, '0')}:{String(startMin).padStart(2, '0')}
@@ -196,13 +196,12 @@ export default function AddSlotModal({
               </p>
             )}
 
-            {/* 제출 */}
             <button
               onClick={handleSubmit}
               disabled={!title.trim() || (type === 'actual' && totalMin <= 0)}
               className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white text-sm font-semibold rounded-lg transition-colors"
             >
-              {isPlan ? '일정 추가' : '기록 추가'}
+              {isPlan ? t.addSchedule : t.addRecord}
             </button>
           </div>
         </Dialog.Content>

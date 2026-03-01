@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, memo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { format, parseISO, differenceInMinutes, addMinutes } from 'date-fns';
@@ -27,15 +27,21 @@ function punctualityLabel(plannedStart: string, actualStart: string): string {
 
 function getDisplayTimes(slot: TimeSlotWithLogs): { displayStart: string; displayEnd: string } {
   const log = slot.actual_logs[0] ?? null;
-  if (!log?.actual_start) return { displayStart: slot.start_at, displayEnd: slot.end_at };
+  if (!log?.actual_start) {
+    // Not started: use ACTUAL-only override position if set (independent from PLAN)
+    if (slot.actual_disp_start) {
+      return { displayStart: slot.actual_disp_start, displayEnd: slot.actual_disp_end ?? slot.end_at };
+    }
+    return { displayStart: slot.start_at, displayEnd: slot.end_at };
+  }
   if (log.actual_end) return { displayStart: log.actual_start, displayEnd: log.actual_end };
   const plannedDurationMin = differenceInMinutes(parseISO(slot.end_at), parseISO(slot.start_at));
   return { displayStart: log.actual_start, displayEnd: addMinutes(parseISO(log.actual_start), plannedDurationMin).toISOString() };
 }
 
 const ACTION_THRESHOLD = 60;
-const LONG_PRESS_MS = 450;
-const CANCEL_MOVE_PX = 8;
+const LONG_PRESS_MS = 300;
+const CANCEL_MOVE_PX = 10;
 
 type PopupState = { slotId: string; type: 'progress' | 'edit'; x: number; y: number } | null;
 type EditTimeState = { slotId: string; logId: string; startVal: string; endVal: string; date: string } | null;
@@ -46,128 +52,9 @@ interface DragData {
   durationMin: number;
   offsetY: number;
   columnRect: DOMRect;
+  dateStr: string;
 }
 
-// ── 슬롯 내부 UI (메모화, 드래그 핸들러는 부모에서 주입) ──────────
-interface SlotContentProps {
-  slot: TimeSlotWithLogs;
-  height: number;
-  isPaused: boolean;
-  isDragging: boolean;
-  isAnyDragging: boolean;
-  onOpenPopup: (e: React.MouseEvent, type: 'progress' | 'edit') => void;
-  onStartSlot: () => void;
-  onPause: () => void;
-  onResume: () => void;
-  onComplete: (status: SlotStatus) => void;
-  onMouseDown: (e: React.MouseEvent) => void;
-  onMouseMove: (e: React.MouseEvent) => void;
-  onMouseUp: (e: React.MouseEvent) => void;
-  onMouseLeave: () => void;
-  top: number;
-}
-
-const SlotContent = memo(function SlotContent({
-  slot, height, isPaused, isDragging, isAnyDragging,
-  onOpenPopup, onStartSlot, onPause, onResume, onComplete,
-  onMouseDown, onMouseMove, onMouseUp, onMouseLeave, top,
-}: SlotContentProps) {
-  const log = slot.actual_logs[0] ?? null;
-  const hasStarted = !!log?.actual_start;
-  const hasEnded = !!log?.actual_end;
-  const showInline = hasStarted && !hasEnded && height >= ACTION_THRESHOLD;
-  const showCompact = hasStarted && !hasEnded && height < ACTION_THRESHOLD;
-  const canDrag = !hasStarted || hasEnded;
-
-  return (
-    <div
-      data-slot="true"
-      data-actual-slot={slot.id}
-      className={clsx(
-        'absolute left-0.5 right-0.5 rounded-sm border border-gray-300 dark:border-gray-600 overflow-hidden z-[2] select-none',
-        isDragging ? 'opacity-30' : '',
-        isAnyDragging && !isDragging ? 'pointer-events-none' : '',
-        canDrag && !isDragging ? 'cursor-grab active:cursor-grabbing' : '',
-      )}
-      style={{ top: top + 1, height: height - 2, touchAction: 'none' }}
-      onMouseDown={canDrag ? onMouseDown : undefined}
-      onMouseMove={canDrag ? onMouseMove : undefined}
-      onMouseUp={canDrag ? onMouseUp : undefined}
-      onMouseLeave={canDrag ? onMouseLeave : undefined}
-    >
-      {!hasStarted ? (
-        <button
-          onClick={onStartSlot}
-          className="w-full h-full flex items-center justify-center gap-1 text-[11px] text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-        >
-          <Play className="w-3 h-3 shrink-0" />
-          {height >= 32 ? '시작' : ''}
-        </button>
-      ) : showInline ? (
-        <div className={clsx('flex flex-col h-full p-0.5 gap-0.5', isPaused ? 'bg-yellow-50/80 dark:bg-yellow-900/20' : 'bg-blue-50/80 dark:bg-blue-900/20')}>
-          <div className={clsx('text-[9px] font-semibold leading-tight px-0.5 flex items-center gap-0.5 pointer-events-none', isPaused ? 'text-yellow-600 dark:text-yellow-400' : 'text-blue-600 dark:text-blue-400')}>
-            {isPaused ? <Pause className="w-2 h-2" /> : <Play className="w-2 h-2" />}
-            {format(parseISO(log!.actual_start!), 'HH:mm')}{isPaused ? ' 일시정지' : ' ▶'}
-          </div>
-          <div className="flex gap-0.5 flex-wrap">
-            {isPaused ? (
-              <button onClick={onResume} className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-blue-200 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200 hover:opacity-80">
-                <RotateCcw className="w-2 h-2" />재개
-              </button>
-            ) : (
-              <button onClick={onPause} className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-yellow-200 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200 hover:opacity-80">
-                <Pause className="w-2 h-2" />정지
-              </button>
-            )}
-            <button onClick={() => onComplete('done')} className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-green-200 text-green-800 dark:bg-green-900/50 dark:text-green-200 hover:opacity-80">
-              <CheckCircle className="w-2 h-2" />완료
-            </button>
-            <button onClick={() => onComplete('partial')} className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-orange-200 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200 hover:opacity-80">
-              <AlertCircle className="w-2 h-2" />부분
-            </button>
-            <button onClick={() => onComplete('skipped')} className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300 hover:opacity-80">
-              <SkipForward className="w-2 h-2" />건너뜀
-            </button>
-          </div>
-        </div>
-      ) : showCompact ? (
-        <button
-          onClick={(e) => onOpenPopup(e, 'progress')}
-          className={clsx('w-full h-full flex items-center px-1 gap-0.5 transition-colors', isPaused ? 'bg-yellow-50/80 dark:bg-yellow-900/20 hover:bg-yellow-100/80' : 'bg-blue-50/80 dark:bg-blue-900/20 hover:bg-blue-100/80 dark:hover:bg-blue-800/30')}
-        >
-          {isPaused ? <Pause className="w-2.5 h-2.5 shrink-0 text-yellow-500" /> : <Play className="w-2.5 h-2.5 shrink-0 text-blue-500" />}
-          <span className={clsx('text-[9px] font-semibold truncate', isPaused ? 'text-yellow-600 dark:text-yellow-400' : 'text-blue-600 dark:text-blue-400')}>
-            {format(parseISO(log!.actual_start!), 'HH:mm')}
-          </span>
-        </button>
-      ) : (
-        <div
-          onClick={(e) => onOpenPopup(e, 'edit')}
-          className={clsx('w-full h-full flex flex-col justify-center px-1.5 text-[11px] cursor-pointer hover:opacity-75 transition-opacity',
-            slot.status === 'done' && 'bg-green-100 dark:bg-green-900/30',
-            slot.status === 'partial' && 'bg-orange-100 dark:bg-orange-900/30',
-            slot.status === 'skipped' && 'bg-gray-100 dark:bg-gray-800/40',
-          )}
-        >
-          <div className="font-medium text-gray-800 dark:text-gray-200 leading-tight pointer-events-none">
-            {log?.actual_start && format(parseISO(log.actual_start), 'HH:mm')}
-            {log?.actual_end && `–${format(parseISO(log.actual_end), 'HH:mm')}`}
-            {height >= 36 && log?.actual_start && log?.actual_end && (
-              <span className="ml-1 text-[9px] opacity-60">
-                ({differenceInMinutes(parseISO(log.actual_end), parseISO(log.actual_start))}분)
-              </span>
-            )}
-          </div>
-          {height >= 48 && log?.actual_start && (
-            <div className="text-[9px] opacity-60 leading-tight pointer-events-none">{punctualityLabel(slot.start_at, log.actual_start)}</div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-});
-
-// ── 메인 컴포넌트 ──────────────────────────────────────────────
 export default function ActualColumn({ slots, onStart, onComplete, onChangeStatus, onUpdateLog, onMoveSlot }: ActualColumnProps) {
   const { startHour, endHour, slotHeight } = useTimetableStore();
   const totalSlots = ((endHour - startHour) * 60) / SLOT_MINUTES;
@@ -180,10 +67,10 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
   const [previewIdx, setPreviewIdx] = useState(0);
   const [, forceUpdate] = useState(0);
 
-  const dragDataRef = useRef<DragData | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
   const longPressedRef = useRef(false);
+  const dragDataRef = useRef<DragData | null>(null);
 
   // 진행중 슬롯 경과시간 갱신
   useEffect(() => {
@@ -208,7 +95,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
   }
 
-  function snapIdxFromClientY(clientY: number, d: DragData) {
+  function snapIdx(clientY: number, d: DragData): number {
     const relY = clientY - d.columnRect.top - d.offsetY;
     return Math.max(0, Math.min(totalSlots - 1, Math.floor(relY / slotHeight)));
   }
@@ -221,90 +108,86 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
     return { newStart: newStart.toISOString(), newEnd: addMinutes(newStart, durationMin).toISOString() };
   }
 
-  // window 리스너 – draggingSlotId 변경 시에만 재등록
-  useEffect(() => {
-    if (!draggingSlotId) return;
-    const slot = slots.find((s) => s.id === draggingSlotId);
-    const dateStr = (slot?.start_at ?? '').slice(0, 10);
-
-    function onMouseMove(e: MouseEvent) {
-      const d = dragDataRef.current;
-      if (d) setPreviewIdx(snapIdxFromClientY(e.clientY, d));
-    }
-    function onMouseUp(e: MouseEvent) {
-      const d = dragDataRef.current;
-      if (d && onMoveSlot) {
-        const { newStart, newEnd } = buildNewTimes(snapIdxFromClientY(e.clientY, d), d.durationMin, dateStr);
-        onMoveSlot(d.slotId, newStart, newEnd);
-      }
-      dragDataRef.current = null; longPressedRef.current = false; setDraggingSlotId(null);
-    }
-    function onTouchMove(e: TouchEvent) {
-      e.preventDefault();
-      const d = dragDataRef.current;
-      if (d) setPreviewIdx(snapIdxFromClientY(e.touches[0].clientY, d));
-    }
-    function onTouchEnd(e: TouchEvent) {
-      const d = dragDataRef.current;
-      if (d && onMoveSlot) {
-        const { newStart, newEnd } = buildNewTimes(snapIdxFromClientY(e.changedTouches[0].clientY, d), d.durationMin, dateStr);
-        onMoveSlot(d.slotId, newStart, newEnd);
-      }
-      dragDataRef.current = null; longPressedRef.current = false; setDraggingSlotId(null);
-    }
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    window.addEventListener('touchmove', onTouchMove, { passive: false });
-    window.addEventListener('touchend', onTouchEnd);
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('touchend', onTouchEnd);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draggingSlotId]);
-
-  // 컨테이너 non-passive touchstart
-  useEffect(() => {
-    const el = columnRef.current;
-    if (!el) return;
-    function handleTouchStart(e: TouchEvent) {
-      const slotEl = (e.target as Element).closest('[data-actual-slot]');
-      if (!slotEl) return;
-      const slotId = slotEl.getAttribute('data-actual-slot')!;
-      const slot = slots.find((s) => s.id === slotId);
-      if (!slot) return;
-      const log = slot.actual_logs[0];
-      if (log?.actual_start && !log?.actual_end) return; // 진행중 슬롯은 드래그 제외
-
-      const touch = e.touches[0];
-      const { displayStart } = getDisplayTimes(slot);
-      startPosRef.current = { x: touch.clientX, y: touch.clientY };
-      longPressedRef.current = false;
-      clearTimer();
-
-      timerRef.current = setTimeout(() => {
-        const rect = el!.getBoundingClientRect();
-        const top = slotIndex(displayStart, startHour) * slotHeight;
-        const durationMin = Math.max(30, differenceInMinutes(parseISO(slot.end_at), parseISO(slot.start_at)));
-        longPressedRef.current = true;
-        dragDataRef.current = { slotId: slot.id, durationMin, offsetY: touch.clientY - rect.top - top, columnRect: rect };
-        setPreviewIdx(Math.round(top / slotHeight));
-        setDraggingSlotId(slot.id);
-      }, LONG_PRESS_MS);
-    }
-    el?.addEventListener('touchstart', handleTouchStart, { passive: false });
-    return () => el?.removeEventListener('touchstart', handleTouchStart);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slots, slotHeight, startHour]);
-
-  function openPopup(e: React.MouseEvent, slotId: string, type: 'progress' | 'edit') {
-    e.stopPropagation();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = Math.min(rect.right + 6, window.innerWidth - 180);
+  function openPopup(el: HTMLElement, slotId: string, type: 'progress' | 'edit') {
+    const rect = el.getBoundingClientRect();
+    const popupWidth = 150;
+    let x = rect.right + 6;
+    if (x + popupWidth > window.innerWidth) x = Math.max(4, rect.left - popupWidth - 6);
     const y = rect.top + rect.height / 2;
     setPopup({ slotId, type, x, y });
+  }
+
+  function handlePointerDown(e: React.PointerEvent, slot: TimeSlotWithLogs, top: number) {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    startPosRef.current = { x: e.clientX, y: e.clientY };
+    longPressedRef.current = false;
+    clearTimer();
+
+    const el = e.currentTarget as HTMLElement;
+    const pointerId = e.pointerId;
+    const initY = e.clientY;
+    const { displayStart } = getDisplayTimes(slot);
+    const dateStr = displayStart.slice(0, 10);
+
+    timerRef.current = setTimeout(() => {
+      const rect = columnRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      // Use actual log duration for completed slots, display duration for others
+      const log = slot.actual_logs[0];
+      const { displayStart: ds2, displayEnd: de2 } = getDisplayTimes(slot);
+      const durationMin = (log?.actual_start && log?.actual_end)
+        ? Math.max(30, differenceInMinutes(parseISO(log.actual_end), parseISO(log.actual_start)))
+        : Math.max(30, differenceInMinutes(parseISO(de2), parseISO(ds2)));
+      longPressedRef.current = true;
+      dragDataRef.current = { slotId: slot.id, durationMin, offsetY: initY - rect.top - top, columnRect: rect, dateStr };
+      try { el.setPointerCapture(pointerId); } catch {}
+      setPreviewIdx(Math.round(top / slotHeight));
+      setDraggingSlotId(slot.id);
+    }, LONG_PRESS_MS);
+  }
+
+  function handlePointerMove(e: React.PointerEvent) {
+    if (!longPressedRef.current) {
+      if (startPosRef.current) {
+        const dx = Math.abs(e.clientX - startPosRef.current.x);
+        const dy = Math.abs(e.clientY - startPosRef.current.y);
+        if (dx > CANCEL_MOVE_PX || dy > CANCEL_MOVE_PX) clearTimer();
+      }
+      return;
+    }
+    const d = dragDataRef.current;
+    if (d) setPreviewIdx(snapIdx(e.clientY, d));
+  }
+
+  function handlePointerUp(e: React.PointerEvent, slot: TimeSlotWithLogs) {
+    clearTimer();
+    if (longPressedRef.current) {
+      const d = dragDataRef.current;
+      if (d && onMoveSlot) {
+        const { newStart, newEnd } = buildNewTimes(snapIdx(e.clientY, d), d.durationMin, d.dateStr);
+        onMoveSlot(d.slotId, newStart, newEnd);
+      }
+      dragDataRef.current = null;
+      longPressedRef.current = false;
+      setDraggingSlotId(null);
+    } else {
+      // Short press: only open popup for completed slots.
+      // Not-started slots let the inner Play button's onClick handle starting.
+      const log = slot.actual_logs[0] ?? null;
+      const hasEnded = !!log?.actual_end;
+      if (hasEnded) {
+        openPopup(e.currentTarget as HTMLElement, slot.id, 'edit');
+      }
+    }
+    startPosRef.current = null;
+  }
+
+  function handlePointerCancel() {
+    clearTimer();
+    dragDataRef.current = null;
+    longPressedRef.current = false;
+    setDraggingSlotId(null);
+    startPosRef.current = null;
   }
 
   function handlePause(slotId: string) {
@@ -333,46 +216,13 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
     });
     setPopup(null);
   }
+
   function handleSaveTime() {
     if (!editTime || !onUpdateLog) return;
     const { slotId, logId, startVal, endVal, date } = editTime;
     if (!startVal || !endVal) return;
     onUpdateLog(slotId, logId, new Date(`${date}T${startVal}:00`).toISOString(), new Date(`${date}T${endVal}:00`).toISOString());
     setEditTime(null);
-  }
-
-  // 마우스 드래그 핸들러 (드래그 가능한 슬롯용)
-  function makeMouseHandlers(slot: TimeSlotWithLogs, top: number) {
-    return {
-      onMouseDown: (e: React.MouseEvent) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        startPosRef.current = { x: e.clientX, y: e.clientY };
-        longPressedRef.current = false;
-        clearTimer();
-        timerRef.current = setTimeout(() => {
-          const rect = columnRef.current?.getBoundingClientRect();
-          if (!rect) return;
-          const durationMin = Math.max(30, differenceInMinutes(parseISO(slot.end_at), parseISO(slot.start_at)));
-          longPressedRef.current = true;
-          dragDataRef.current = { slotId: slot.id, durationMin, offsetY: e.clientY - rect.top - top, columnRect: rect };
-          setPreviewIdx(Math.round(top / slotHeight));
-          setDraggingSlotId(slot.id);
-        }, LONG_PRESS_MS);
-      },
-      onMouseMove: (e: React.MouseEvent) => {
-        if (longPressedRef.current || !startPosRef.current) return;
-        if (Math.abs(e.clientX - startPosRef.current.x) > CANCEL_MOVE_PX || Math.abs(e.clientY - startPosRef.current.y) > CANCEL_MOVE_PX) clearTimer();
-      },
-      onMouseUp: (e: React.MouseEvent) => {
-        clearTimer();
-        // 드래그가 아니었으면 팝업 열기
-        if (!longPressedRef.current) {
-          openPopup(e, slot.id, 'edit');
-        }
-      },
-      onMouseLeave: clearTimer,
-    };
   }
 
   const dragSlot = draggingSlotId ? slots.find((s) => s.id === draggingSlotId) : null;
@@ -389,35 +239,106 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
         const log = slot.actual_logs[0] ?? null;
         const hasStarted = !!log?.actual_start;
         const hasEnded = !!log?.actual_end;
+        // Not-started slots: drag updates actual_disp_start/end (ACTUAL-only position, PLAN unaffected).
+        // Completed slots: drag updates actual_log times.
+        // In-progress slots cannot be dragged.
         const canDrag = !hasStarted || hasEnded;
+        const showInline = hasStarted && !hasEnded && height >= ACTION_THRESHOLD;
+        const showCompact = hasStarted && !hasEnded && height < ACTION_THRESHOLD;
 
         return (
-          <SlotContent
+          <div
             key={slot.id}
-            slot={slot}
-            top={top}
-            height={height}
-            isPaused={isPaused}
-            isDragging={isDragging}
-            isAnyDragging={!!draggingSlotId}
-            onOpenPopup={(e, type) => openPopup(e, slot.id, type)}
-            onStartSlot={() => onStart(slot.id)}
-            onPause={() => handlePause(slot.id)}
-            onResume={() => handleResume(slot.id)}
-            onComplete={(status) => handleComplete(slot.id, status)}
-            {...(canDrag ? makeMouseHandlers(slot, top) : {
-              onMouseDown: () => {},
-              onMouseMove: () => {},
-              onMouseUp: () => {},
-              onMouseLeave: () => {},
-            })}
-          />
+            data-slot="true"
+            data-actual-slot={slot.id}
+            className={clsx(
+              'absolute left-0.5 right-0.5 rounded-sm border border-gray-300 dark:border-gray-600 overflow-hidden z-[2] select-none',
+              isDragging ? 'opacity-30' : '',
+              draggingSlotId && !isDragging ? 'pointer-events-none' : '',
+              canDrag ? 'cursor-grab active:cursor-grabbing' : '',
+            )}
+            style={{ top: top + 1, height: height - 2, touchAction: canDrag ? 'none' : undefined }}
+            onPointerDown={canDrag ? (e) => handlePointerDown(e, slot, top) : undefined}
+            onPointerMove={canDrag ? handlePointerMove : undefined}
+            onPointerUp={canDrag ? (e) => handlePointerUp(e, slot) : undefined}
+            onPointerCancel={canDrag ? handlePointerCancel : undefined}
+          >
+            {!hasStarted ? (
+              <button
+                onClick={() => onStart(slot.id)}
+                className="w-full h-full flex items-center justify-center gap-1 text-[11px] text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+              >
+                <Play className="w-3 h-3 shrink-0" />
+                {height >= 32 ? '시작' : ''}
+              </button>
+            ) : showInline ? (
+              <div className={clsx('flex flex-col h-full p-0.5 gap-0.5', isPaused ? 'bg-yellow-50/80 dark:bg-yellow-900/20' : 'bg-blue-50/80 dark:bg-blue-900/20')}>
+                <div className={clsx('text-[9px] font-semibold leading-tight px-0.5 flex items-center gap-0.5 pointer-events-none', isPaused ? 'text-yellow-600 dark:text-yellow-400' : 'text-blue-600 dark:text-blue-400')}>
+                  {isPaused ? <Pause className="w-2 h-2" /> : <Play className="w-2 h-2" />}
+                  {format(parseISO(log!.actual_start!), 'HH:mm')}{isPaused ? ' 일시정지' : ' ▶'}
+                </div>
+                <div className="flex gap-0.5 flex-wrap">
+                  {isPaused ? (
+                    <button onClick={() => handleResume(slot.id)} className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-blue-200 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200 hover:opacity-80">
+                      <RotateCcw className="w-2 h-2" />재개
+                    </button>
+                  ) : (
+                    <button onClick={() => handlePause(slot.id)} className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-yellow-200 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200 hover:opacity-80">
+                      <Pause className="w-2 h-2" />정지
+                    </button>
+                  )}
+                  <button onClick={() => handleComplete(slot.id, 'done')} className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-green-200 text-green-800 dark:bg-green-900/50 dark:text-green-200 hover:opacity-80">
+                    <CheckCircle className="w-2 h-2" />완료
+                  </button>
+                  <button onClick={() => handleComplete(slot.id, 'partial')} className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-orange-200 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200 hover:opacity-80">
+                    <AlertCircle className="w-2 h-2" />부분
+                  </button>
+                  <button onClick={() => handleComplete(slot.id, 'skipped')} className="flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300 hover:opacity-80">
+                    <SkipForward className="w-2 h-2" />건너뜀
+                  </button>
+                </div>
+              </div>
+            ) : showCompact ? (
+              <button
+                onClick={(e) => openPopup(e.currentTarget as HTMLElement, slot.id, 'progress')}
+                className={clsx('w-full h-full flex items-center px-1 gap-0.5 transition-colors', isPaused ? 'bg-yellow-50/80 dark:bg-yellow-900/20 hover:bg-yellow-100/80' : 'bg-blue-50/80 dark:bg-blue-900/20 hover:bg-blue-100/80 dark:hover:bg-blue-800/30')}
+              >
+                {isPaused ? <Pause className="w-2.5 h-2.5 shrink-0 text-yellow-500" /> : <Play className="w-2.5 h-2.5 shrink-0 text-blue-500" />}
+                <span className={clsx('text-[9px] font-semibold truncate', isPaused ? 'text-yellow-600 dark:text-yellow-400' : 'text-blue-600 dark:text-blue-400')}>
+                  {format(parseISO(log!.actual_start!), 'HH:mm')}
+                </span>
+              </button>
+            ) : (
+              /* Completed slot — pointer handlers on outer div open popup via handlePointerUp */
+              <div
+                className={clsx('w-full h-full flex flex-col justify-center px-1.5 text-[11px]',
+                  slot.status === 'done' && 'bg-green-100 dark:bg-green-900/30',
+                  slot.status === 'partial' && 'bg-orange-100 dark:bg-orange-900/30',
+                  slot.status === 'skipped' && 'bg-gray-100 dark:bg-gray-800/40',
+                )}
+              >
+                <div className="font-medium text-gray-800 dark:text-gray-200 leading-tight pointer-events-none">
+                  {log?.actual_start && format(parseISO(log.actual_start), 'HH:mm')}
+                  {log?.actual_end && `–${format(parseISO(log.actual_end), 'HH:mm')}`}
+                  {height >= 36 && log?.actual_start && log?.actual_end && (
+                    <span className="ml-1 text-[9px] opacity-60">
+                      ({differenceInMinutes(parseISO(log.actual_end), parseISO(log.actual_start))}분)
+                    </span>
+                  )}
+                </div>
+                {height >= 48 && log?.actual_start && (
+                  <div className="text-[9px] opacity-60 leading-tight pointer-events-none">{punctualityLabel(slot.start_at, log.actual_start)}</div>
+                )}
+              </div>
+            )}
+          </div>
         );
       })}
 
       {/* 드래그 미리보기 */}
       {draggingSlotId && dragSlot && (() => {
-        const h = slotSpan(dragSlot.start_at, dragSlot.end_at) * slotHeight;
+        const { displayStart: ds, displayEnd: de } = getDisplayTimes(dragSlot);
+        const h = slotSpan(ds, de) * slotHeight;
         return (
           <div
             className="absolute left-0.5 right-0.5 rounded-sm border-2 border-dashed border-green-500 bg-green-100/70 dark:bg-green-900/50 z-[5] pointer-events-none"

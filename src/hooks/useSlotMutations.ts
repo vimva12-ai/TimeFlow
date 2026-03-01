@@ -308,6 +308,40 @@ export function useSlotMutations(date: string) {
     retryDelay: 5000,
   });
 
+  // ── updateActualDispTime: ACTUAL 전용 표시 위치 수정 ────────
+  const updateActualDispTime = useMutation({
+    mutationFn: async ({
+      slotId,
+      actual_disp_start,
+      actual_disp_end,
+    }: {
+      slotId: string;
+      actual_disp_start: string;
+      actual_disp_end: string;
+    }) => {
+      await updateDoc(getSlotRef(slotId), { actual_disp_start, actual_disp_end });
+    },
+    onMutate: async ({ slotId, actual_disp_start, actual_disp_end }) => {
+      await queryClient.cancelQueries({ queryKey: qKey });
+      const previous = queryClient.getQueryData<DailyPlanWithSlots>(qKey);
+      if (previous) {
+        queryClient.setQueryData<DailyPlanWithSlots>(qKey, {
+          ...previous,
+          time_slots: previous.time_slots.map((s) =>
+            s.id === slotId ? { ...s, actual_disp_start, actual_disp_end } : s
+          ),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(qKey, ctx.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: qKey }),
+    retry: 1,
+    retryDelay: 5000,
+  });
+
   // ── updateSlotTime: 슬롯 시간(start_at/end_at) 수정 ─────────
   const updateSlotTime = useMutation({
     mutationFn: async ({
@@ -342,5 +376,5 @@ export function useSlotMutations(date: string) {
     retryDelay: 5000,
   });
 
-  return { createSlot, updateSlotStatus, updateSlotTitle, deleteSlot, logActual, createActualEntry, updateActualLog, updateSlotTime };
+  return { createSlot, updateSlotStatus, updateSlotTitle, deleteSlot, logActual, createActualEntry, updateActualLog, updateSlotTime, updateActualDispTime };
 }

@@ -34,7 +34,7 @@ interface ModalState {
 export default function TodayPage() {
   const { selectedDate } = useTimetableStore();
   const { data: plan, isLoading } = useDailyPlan(selectedDate);
-  const { createSlot, updateSlotStatus, logActual, createActualEntry, updateActualLog, updateSlotTime } = useSlotMutations(selectedDate);
+  const { createSlot, updateSlotStatus, logActual, createActualEntry, updateActualLog, updateSlotTime, updateActualDispTime } = useSlotMutations(selectedDate);
   const { data: weeklyReport } = useWeeklyReport();
   const queryClient = useQueryClient();
   const stats = calcStats(plan);
@@ -187,9 +187,18 @@ export default function TodayPage() {
               onUpdateLog={(slotId, logId, actualStart, actualEnd) =>
                 updateActualLog.mutate({ slotId, logId, actual_start: actualStart, actual_end: actualEnd })
               }
-              onMoveSlot={(slotId, newStart, newEnd) =>
-                updateSlotTime.mutate({ slotId, start_at: newStart, end_at: newEnd })
-              }
+              onMoveSlot={(slotId, newStart, newEnd) => {
+                // ACTUAL drag routing:
+                // - Completed slots: update actual_log times (ACTUAL display only)
+                // - Not-started slots: update actual_disp_start/end (PLAN unaffected)
+                const slot = plan.time_slots.find((s) => s.id === slotId);
+                const log = slot?.actual_logs[0];
+                if (log?.actual_start) {
+                  updateActualLog.mutate({ slotId, logId: log.id, actual_start: newStart, actual_end: newEnd });
+                } else {
+                  updateActualDispTime.mutate({ slotId, actual_disp_start: newStart, actual_disp_end: newEnd });
+                }
+              }}
             />
           ) : null
         }

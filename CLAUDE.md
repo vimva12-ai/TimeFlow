@@ -81,7 +81,18 @@ All mutations in `src/hooks/useSlotMutations.ts`:
 ```
 onMutate → cancel queries → optimistic update → onError → rollback → onSettled → invalidateQueries
 ```
-`createSlot` and `createActualEntry` both have optimistic updates. Retry: 1× after 5s.
+Full mutation list:
+- `createSlot` — optimistic update, adds to time_slots
+- `createActualEntry` — creates slot + actual_log simultaneously (status: 'done')
+- `updateSlotStatus` — optimistic update
+- `updateSlotTitle` — no optimistic update
+- `deleteSlot` — optimistic update
+- `logActual` — creates actual_log subcollection doc
+- `updateActualLog` — updates actual_log start/end; optimistic update
+- `updateSlotTime` — updates PLAN `start_at`/`end_at`; optimistic update
+- `updateActualDispTime` — updates `actual_disp_start`/`actual_disp_end` (ACTUAL-only display position, PLAN unaffected); optimistic update
+
+Retry: 1× after 5s for all mutations.
 
 ### Firestore Query Patterns
 
@@ -111,13 +122,47 @@ The grid is built from three components working together:
 
 - **`PlanColumn.tsx`** — renders planned slot buttons with `data-slot="true"`. On click → `setEditingSlotId(slot.id)` (opens SlotEditModal). Props: `slots`, `planId`, `date`.
 
-- **`ActualColumn.tsx`** — renders actual slot containers with `data-slot="true"`. Props: `slots`, `onStart`, `onComplete`, `onChangeStatus`.
-  - **Three display modes** based on slot state and height:
-    1. **Not started**: Play button → calls `onStart(slotId)`
-    2. **In-progress, height ≥ `ACTION_THRESHOLD` (60px)**: inline 완료/부분/건너뜀 buttons → calls `onComplete(slotId, status, new Date().toISOString())`
-    3. **In-progress, height < 60px**: compact `▶ HH:mm` button → tap opens right-side portal popup
-  - **Completed slots**: click anywhere → opens right-side portal popup with 완료/부분/건너뜀 → calls `onChangeStatus(slotId, status)` (status-only update, no new log)
+- **`ActualColumn.tsx`** — renders actual slot containers with `data-slot="true"`. Props: `slots`, `onStart`, `onComplete`, `onChangeStatus`, `onUpdateLog`, `onMoveSlot`.
+  - **Display position priority** (`getDisplayTimes`):
+    1. Not started + `actual_disp_start` set → use `actual_disp_start`/`actual_disp_end` (ACTUAL-only position)
+    2. Not started, no override → fall back to PLAN `start_at`/`end_at`
+    3. In-progress (has `actual_start`, no `actual_end`) → `actual_start` + planned duration
+    4. Completed → `actual_start`/`actual_end` from log
+  - **`actual_disp_start`/`actual_disp_end`** on `TimeSlot` — optional fields for ACTUAL-only display position. Set via `updateActualDispTime` when a not-started slot is dragged. PLAN position (`start_at`/`end_at`) is never modified by ACTUAL drag.
+  - **Three render modes** based on slot state and height:
+    1. **Not started**: Play button → calls `onStart(slotId)`. `canDrag = true`.
+    2. **In-progress, height ≥ `ACTION_THRESHOLD` (60px)**: inline 완료/부분/건너뜀 buttons → calls `onComplete(slotId, status, end)`. `canDrag = false`.
+    3. **In-progress, height < 60px**: compact `▶ HH:mm` button → opens portal popup. `canDrag = false`.
+  - **Completed slots**: `canDrag = true`. Short press → right-side portal popup with status buttons + "시간 수정". Drag → calls `onMoveSlot` → routed to `updateActualLog` in today/page.tsx.
   - **Popup** uses `createPortal` to `document.body` with `position: fixed` — necessary to escape the scroll container's `overflow-y: auto` clipping. Position calculated from `e.currentTarget.getBoundingClientRect()`.
+
+### Drag System (PlanColumn & ActualColumn)
+
+Both columns use the **Pointer Events API** with a long-press drag pattern:
+
+```typescript
+const LONG_PRESS_MS = 300;
+const CANCEL_MOVE_PX = 8;  // (10 in ActualColumn)
+
+function handlePointerDown(e, slot, top) {
+  // Start a 300ms timer
+  timerRef.current = setTimeout(() => {
+    longPressedRef.current = true;
+    dragDataRef.current = { slotId, durationMin, offsetY, columnRect, ... };
+    el.setPointerCapture(pointerId);  // routes all future pointer events to this element
+    setDraggingSlotId(slot.id);
+  }, LONG_PRESS_MS);
+}
+// pointerMove before 300ms cancels timer if moved > CANCEL_MOVE_PX (allows normal scroll)
+// pointerUp after 300ms → commits drag via onMoveSlot; before → treated as tap/click
+```
+
+Key rules:
+- **No `e.preventDefault()`** in `handlePointerDown` — prevents cancelling subsequent `click` events on child buttons (Play button, etc.)
+- `setPointerCapture` inside `setTimeout` ensures capture happens only after long-press threshold
+- `touch-action: none` CSS on draggable elements prevents browser scroll interference
+- Drag preview shown while dragging (dashed border overlay, z-index 5)
+- **`today/page.tsx` routes `onMoveSlot`**: PLAN drag → `updateSlotTime`; ACTUAL completed drag → `updateActualLog`; ACTUAL not-started drag → `updateActualDispTime`
 
 ### Modal Architecture
 
@@ -189,9 +234,27 @@ CRON_SECRET
 
 When adding a new authorized domain for Firebase Auth (e.g., new deployment URL), add it in Firebase Console → Authentication → Settings → Authorized domains.
 
+### i18n
+
+`src/lib/i18n.tsx` — React Context-based internationalization. Supports `ko` (Korean), `en` (English), `ja` (Japanese). Locale persisted to `localStorage` under key `'timeflow-locale'`.
+
+Usage:
+```typescript
+const { t, locale, setLocale } = useI18n();
+// t.save → '저장' | 'Save' | '保存'
+// t.daysBasis(7) → '7일 기준' (function keys exist too)
+```
+
+**When adding any user-visible string:**
+1. Add to `translations.ko`, `translations.en`, `translations.ja` in `src/lib/i18n.tsx`
+2. Add the key + type to the `Translations` interface in the same file
+3. Use `t.yourKey` in the component
+
+The `Translations` interface must stay in sync with all three locale objects — TypeScript will catch mismatches.
+
 ### UI Conventions
 
-- All user-visible text is in **Korean**
+- All user-visible text must go through the i18n system (`useI18n()`) — no hardcoded Korean/English strings in components
 - Dark mode: `dark:` Tailwind prefix, toggled via `.dark` class on `<html>`, persisted to `localStorage`
 - Slot status colors: planned=blue, done=green, partial=orange, skipped=gray
 - Layout: sidebar (desktop, `w-52`) + bottom nav (mobile). Sidebar contains monthly `DatePicker` calendar then nav links.

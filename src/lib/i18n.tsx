@@ -76,6 +76,37 @@ const translations = {
     punctualBadge: '정시왕',
     completionBadge: '달성왕',
     badgeList: '뱃지 목록',
+    timePunctualityLabel: '시간 준수',
+    completionRateLabel: '완료율',
+    // AddSlotModal
+    addPlanTitle: 'PLAN 일정 추가',
+    addActualTitle: 'ACTUAL 기록 추가',
+    taskLabel: '할 일',
+    activityLabel: '활동명',
+    taskPlaceholder: '할 일을 입력하세요',
+    activityPlaceholder: '무엇을 했나요?',
+    durationLabel: '지속 시간',
+    addSchedule: '일정 추가',
+    addRecord: '기록 추가',
+    // 주간 리포트
+    loading: '로딩 중...',
+    noWeeklyData: '이번 주 데이터가 없습니다.',
+    registerForStats: '오늘 탭에서 일정을 등록하면 통계가 표시됩니다.',
+    exportPDF: 'PDF 내보내기',
+    thisWeekFocus: '이번 주 집중 시간',
+    bestDay: '베스트 데이',
+    sevenDayRate: '7일 달성률',
+    dayPattern: '요일별 완료율 패턴',
+    periodRate: '기간 달성률',
+    recent: '최근',
+    calculating: '계산 중...',
+    avgRate: '평균 달성률',
+    dailyAvgFocus: '일평균 집중',
+    daysBasis: (d: number) => `${d}일 기준`,
+    punctualityRateLabel: '준수율',
+    customRange: '직접 설정',
+    completed: '완료',
+    dayOfWeekSuffix: '요일',
   },
   en: {
     save: 'Save',
@@ -139,6 +170,35 @@ const translations = {
     punctualBadge: 'On-Time',
     completionBadge: 'Achiever',
     badgeList: 'Badge List',
+    timePunctualityLabel: 'Punctuality',
+    completionRateLabel: 'Completion',
+    addPlanTitle: 'Add PLAN',
+    addActualTitle: 'Add ACTUAL',
+    taskLabel: 'Task',
+    activityLabel: 'Activity',
+    taskPlaceholder: 'Enter task name',
+    activityPlaceholder: 'What did you do?',
+    durationLabel: 'Duration',
+    addSchedule: 'Add Schedule',
+    addRecord: 'Add Record',
+    loading: 'Loading...',
+    noWeeklyData: 'No data this week.',
+    registerForStats: 'Add schedules in Today tab to see stats.',
+    exportPDF: 'Export PDF',
+    thisWeekFocus: 'This Week Focus',
+    bestDay: 'Best Day',
+    sevenDayRate: '7-Day Rate',
+    dayPattern: 'Daily Completion Pattern',
+    periodRate: 'Period Rate',
+    recent: 'Last',
+    calculating: 'Calculating...',
+    avgRate: 'Avg Rate',
+    dailyAvgFocus: 'Daily Avg Focus',
+    daysBasis: (d: number) => `over ${d} days`,
+    punctualityRateLabel: 'On-time Rate',
+    customRange: 'Custom',
+    completed: 'Done',
+    dayOfWeekSuffix: '',
   },
   ja: {
     save: '保存',
@@ -202,6 +262,35 @@ const translations = {
     punctualBadge: '定時王',
     completionBadge: '達成王',
     badgeList: 'バッジ一覧',
+    timePunctualityLabel: '時間遵守',
+    completionRateLabel: '完了率',
+    addPlanTitle: 'PLAN 予定を追加',
+    addActualTitle: 'ACTUAL 記録を追加',
+    taskLabel: 'タスク',
+    activityLabel: '活動名',
+    taskPlaceholder: 'タスク名を入力',
+    activityPlaceholder: '何をしましたか？',
+    durationLabel: '所要時間',
+    addSchedule: '予定を追加',
+    addRecord: '記録を追加',
+    loading: '読み込み中...',
+    noWeeklyData: '今週のデータがありません。',
+    registerForStats: '今日タブで予定を登録すると統計が表示されます。',
+    exportPDF: 'PDF エクスポート',
+    thisWeekFocus: '今週の集中時間',
+    bestDay: 'ベスト デイ',
+    sevenDayRate: '7日間達成率',
+    dayPattern: '曜日別完了率パターン',
+    periodRate: '期間達成率',
+    recent: '直近',
+    calculating: '計算中...',
+    avgRate: '平均達成率',
+    dailyAvgFocus: '日平均集中',
+    daysBasis: (d: number) => `${d}日間基準`,
+    punctualityRateLabel: '時間遵守率',
+    customRange: 'カスタム',
+    completed: '完了',
+    dayOfWeekSuffix: '曜日',
   },
 } as const;
 
@@ -268,6 +357,35 @@ export interface Translations {
   punctualBadge: string;
   completionBadge: string;
   badgeList: string;
+  timePunctualityLabel: string;
+  completionRateLabel: string;
+  addPlanTitle: string;
+  addActualTitle: string;
+  taskLabel: string;
+  activityLabel: string;
+  taskPlaceholder: string;
+  activityPlaceholder: string;
+  durationLabel: string;
+  addSchedule: string;
+  addRecord: string;
+  loading: string;
+  noWeeklyData: string;
+  registerForStats: string;
+  exportPDF: string;
+  thisWeekFocus: string;
+  bestDay: string;
+  sevenDayRate: string;
+  dayPattern: string;
+  periodRate: string;
+  recent: string;
+  calculating: string;
+  avgRate: string;
+  dailyAvgFocus: string;
+  daysBasis: (d: number) => string;
+  punctualityRateLabel: string;
+  customRange: string;
+  completed: string;
+  dayOfWeekSuffix: string;
 }
 
 interface I18nContextValue {

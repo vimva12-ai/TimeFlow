@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import clsx from 'clsx';
 import { format, parseISO, addMinutes, differenceInMinutes } from 'date-fns';
 import { useTimetableStore } from '@/store/timetableStore';
@@ -39,7 +39,7 @@ interface DragData {
   columnRect: DOMRect;
 }
 
-const LONG_PRESS_MS = 450;
+const LONG_PRESS_MS = 300;
 const CANCEL_MOVE_PX = 8;
 
 export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps) {
@@ -47,22 +47,19 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
   const totalSlots = ((endHour - startHour) * 60) / SLOT_MINUTES;
   const columnRef = useRef<HTMLDivElement>(null);
 
-  // 드래그 중인 슬롯 ID (UI 트리거 역할만, 변경 시에만 window 리스너 재등록)
   const [draggingSlotId, setDraggingSlotId] = useState<string | null>(null);
-  // 미리보기 위치 (별도 state - 리스너 재등록 없이 DOM만 업데이트)
   const [previewIdx, setPreviewIdx] = useState(0);
 
-  // ref로 관리: 렌더 트리거 없이 최신값 유지
-  const dragDataRef = useRef<DragData | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
   const longPressedRef = useRef(false);
+  const dragDataRef = useRef<DragData | null>(null);
 
   function clearTimer() {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
   }
 
-  function snapIdxFromClientY(clientY: number, d: DragData) {
+  function snapIdx(clientY: number, d: DragData): number {
     const relY = clientY - d.columnRect.top - d.offsetY;
     return Math.max(0, Math.min(totalSlots - 1, Math.floor(relY / slotHeight)));
   }
@@ -75,133 +72,64 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
     return { newStart: newStart.toISOString(), newEnd: addMinutes(newStart, durationMin).toISOString() };
   }
 
-  // ── window 리스너: draggingSlotId 변경 시에만 attach/detach ──
-  useEffect(() => {
-    if (!draggingSlotId) return;
-
-    function onMouseMove(e: MouseEvent) {
-      const d = dragDataRef.current;
-      if (!d) return;
-      setPreviewIdx(snapIdxFromClientY(e.clientY, d));
-    }
-
-    function onMouseUp(e: MouseEvent) {
-      const d = dragDataRef.current;
-      if (d && onMoveSlot) {
-        const { newStart, newEnd } = buildNewTimes(snapIdxFromClientY(e.clientY, d), d.durationMin);
-        onMoveSlot(d.slotId, newStart, newEnd);
-      }
-      dragDataRef.current = null;
-      longPressedRef.current = false;
-      setDraggingSlotId(null);
-    }
-
-    function onTouchMove(e: TouchEvent) {
-      e.preventDefault();
-      const d = dragDataRef.current;
-      if (!d) return;
-      setPreviewIdx(snapIdxFromClientY(e.touches[0].clientY, d));
-    }
-
-    function onTouchEnd(e: TouchEvent) {
-      const d = dragDataRef.current;
-      if (d && onMoveSlot) {
-        const { newStart, newEnd } = buildNewTimes(snapIdxFromClientY(e.changedTouches[0].clientY, d), d.durationMin);
-        onMoveSlot(d.slotId, newStart, newEnd);
-      }
-      dragDataRef.current = null;
-      longPressedRef.current = false;
-      setDraggingSlotId(null);
-    }
-
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    window.addEventListener('touchmove', onTouchMove, { passive: false });
-    window.addEventListener('touchend', onTouchEnd);
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('touchend', onTouchEnd);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draggingSlotId]); // draggingSlotId 변경 시에만! mousemove마다 재등록 방지
-
-  // ── 컨테이너 수준 non-passive touchstart (스크롤 방지) ──
-  useEffect(() => {
-    const el = columnRef.current;
-    if (!el) return;
-
-    function handleTouchStart(e: TouchEvent) {
-      const slotEl = (e.target as Element).closest('[data-plan-slot]');
-      if (!slotEl) return;
-      const slotId = slotEl.getAttribute('data-plan-slot')!;
-      const slot = slots.find((s) => s.id === slotId);
-      if (!slot) return;
-
-      const touch = e.touches[0];
-      startPosRef.current = { x: touch.clientX, y: touch.clientY };
-      longPressedRef.current = false;
-      clearTimer();
-
-      timerRef.current = setTimeout(() => {
-        const rect = el!.getBoundingClientRect();
-        const top = slotIndex(slot.start_at, startHour) * slotHeight;
-        const durationMin = Math.max(30, differenceInMinutes(parseISO(slot.end_at), parseISO(slot.start_at)));
-        longPressedRef.current = true;
-        dragDataRef.current = {
-          slotId: slot.id,
-          durationMin,
-          offsetY: touch.clientY - rect.top - top,
-          columnRect: rect,
-        };
-        setPreviewIdx(Math.round(top / slotHeight));
-        setDraggingSlotId(slot.id);
-      }, LONG_PRESS_MS);
-    }
-
-    el?.addEventListener('touchstart', handleTouchStart, { passive: false });
-    return () => el?.removeEventListener('touchstart', handleTouchStart);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slots, slotHeight, startHour]);
-
-  // ── 마우스 핸들러 (요소별) ──
-  function handleMouseDown(e: React.MouseEvent, slot: TimeSlotWithLogs, top: number) {
-    if (e.button !== 0) return;
-    e.preventDefault();
+  function handlePointerDown(e: React.PointerEvent, slot: TimeSlotWithLogs, top: number) {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
     startPosRef.current = { x: e.clientX, y: e.clientY };
     longPressedRef.current = false;
     clearTimer();
+
+    const el = e.currentTarget as HTMLElement;
+    const pointerId = e.pointerId;
+    const initY = e.clientY;
 
     timerRef.current = setTimeout(() => {
       const rect = columnRef.current?.getBoundingClientRect();
       if (!rect) return;
       const durationMin = Math.max(30, differenceInMinutes(parseISO(slot.end_at), parseISO(slot.start_at)));
       longPressedRef.current = true;
-      dragDataRef.current = {
-        slotId: slot.id,
-        durationMin,
-        offsetY: e.clientY - rect.top - top,
-        columnRect: rect,
-      };
+      dragDataRef.current = { slotId: slot.id, durationMin, offsetY: initY - rect.top - top, columnRect: rect };
+      try { el.setPointerCapture(pointerId); } catch {}
       setPreviewIdx(Math.round(top / slotHeight));
       setDraggingSlotId(slot.id);
     }, LONG_PRESS_MS);
   }
 
-  function handleMouseMove(e: React.MouseEvent) {
-    if (longPressedRef.current || !startPosRef.current) return;
-    const dx = Math.abs(e.clientX - startPosRef.current.x);
-    const dy = Math.abs(e.clientY - startPosRef.current.y);
-    if (dx > CANCEL_MOVE_PX || dy > CANCEL_MOVE_PX) clearTimer();
+  function handlePointerMove(e: React.PointerEvent) {
+    if (!longPressedRef.current) {
+      if (startPosRef.current) {
+        const dx = Math.abs(e.clientX - startPosRef.current.x);
+        const dy = Math.abs(e.clientY - startPosRef.current.y);
+        if (dx > CANCEL_MOVE_PX || dy > CANCEL_MOVE_PX) clearTimer();
+      }
+      return;
+    }
+    const d = dragDataRef.current;
+    if (d) setPreviewIdx(snapIdx(e.clientY, d));
   }
 
-  function handleMouseUp(slot: TimeSlotWithLogs) {
+  function handlePointerUp(e: React.PointerEvent, slot: TimeSlotWithLogs) {
     clearTimer();
-    if (!longPressedRef.current) {
+    if (longPressedRef.current) {
+      const d = dragDataRef.current;
+      if (d && onMoveSlot) {
+        const { newStart, newEnd } = buildNewTimes(snapIdx(e.clientY, d), d.durationMin);
+        onMoveSlot(d.slotId, newStart, newEnd);
+      }
+      dragDataRef.current = null;
+      longPressedRef.current = false;
+      setDraggingSlotId(null);
+    } else {
       setEditingSlotId(slot.id);
     }
-    // 드래그 중이었으면 window mouseup이 처리
+    startPosRef.current = null;
+  }
+
+  function handlePointerCancel() {
+    clearTimer();
+    dragDataRef.current = null;
+    longPressedRef.current = false;
+    setDraggingSlotId(null);
+    startPosRef.current = null;
   }
 
   const dragSlot = draggingSlotId ? slots.find((s) => s.id === draggingSlotId) : null;
@@ -225,10 +153,10 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
               draggingSlotId && !isDragging ? 'pointer-events-none' : 'cursor-grab active:cursor-grabbing',
             )}
             style={{ top: top + 1, height: height - 2, touchAction: 'none' }}
-            onMouseDown={(e) => handleMouseDown(e, slot, top)}
-            onMouseMove={handleMouseMove}
-            onMouseUp={() => handleMouseUp(slot)}
-            onMouseLeave={clearTimer}
+            onPointerDown={(e) => handlePointerDown(e, slot, top)}
+            onPointerMove={handlePointerMove}
+            onPointerUp={(e) => handlePointerUp(e, slot)}
+            onPointerCancel={handlePointerCancel}
           >
             <div className="font-semibold truncate leading-tight pointer-events-none">{slot.title}</div>
             {height >= 36 && (

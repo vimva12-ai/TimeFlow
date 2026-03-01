@@ -1,4 +1,7 @@
+'use client';
+
 import clsx from 'clsx';
+import { useI18n } from '@/lib/i18n';
 
 interface AchievementBadgesProps {
   timePunctuality: number;
@@ -28,6 +31,8 @@ export default function AchievementBadges({
   focusMinutes,
   isLoading = false,
 }: AchievementBadgesProps) {
+  const { t } = useI18n();
+
   if (isLoading) {
     return (
       <div className="flex items-center gap-3">
@@ -43,9 +48,9 @@ export default function AchievementBadges({
   const focusLabel = focusHours > 0 ? `${focusHours}h ${focusRemMin}m` : `${focusMinutes}m`;
 
   const badges = [
-    { label: '시간 준수', value: `${Math.round(timePunctuality)}%`, score: timePunctuality },
-    { label: '완료율', value: `${Math.round(completionRate)}%`, score: completionRate },
-    { label: '집중 시간', value: focusLabel, score: completionRate },
+    { label: t.timePunctualityLabel, value: `${Math.round(timePunctuality)}%`, score: timePunctuality },
+    { label: t.completionRateLabel, value: `${Math.round(completionRate)}%`, score: completionRate },
+    { label: t.focusTime, value: focusLabel, score: completionRate },
   ];
 
   return (

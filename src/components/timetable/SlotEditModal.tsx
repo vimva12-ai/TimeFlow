@@ -7,13 +7,7 @@ import { format, parseISO } from 'date-fns';
 import { useTimetableStore } from '@/store/timetableStore';
 import { type TimeSlotWithLogs, type SlotStatus } from '@/types/database';
 import { useSlotMutations } from '@/hooks/useSlotMutations';
-
-const STATUS_OPTIONS: { value: SlotStatus; label: string }[] = [
-  { value: 'planned', label: '계획' },
-  { value: 'done',    label: '완료' },
-  { value: 'partial', label: '부분 완료' },
-  { value: 'skipped', label: '건너뜀' },
-];
+import { useI18n } from '@/lib/i18n';
 
 interface SlotEditModalProps {
   slots: TimeSlotWithLogs[];
@@ -23,11 +17,19 @@ interface SlotEditModalProps {
 export default function SlotEditModal({ slots, date }: SlotEditModalProps) {
   const { editingSlotId, setEditingSlotId } = useTimetableStore();
   const { updateSlotStatus, updateSlotTitle, deleteSlot } = useSlotMutations(date);
+  const { t } = useI18n();
 
   const slot = slots.find((s) => s.id === editingSlotId) ?? null;
   const [title, setTitle] = useState('');
   const [status, setStatus] = useState<SlotStatus>('planned');
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const STATUS_OPTIONS: { value: SlotStatus; label: string }[] = [
+    { value: 'planned', label: t.planned },
+    { value: 'done',    label: t.doneLabel },
+    { value: 'partial', label: t.partialLabel },
+    { value: 'skipped', label: t.skippedLabel },
+  ];
 
   useEffect(() => {
     if (slot) {
@@ -60,7 +62,7 @@ export default function SlotEditModal({ slots, date }: SlotEditModalProps) {
         >
           <div className="flex items-center justify-between mb-4">
             <Dialog.Title className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              슬롯 편집
+              {t.editSlot}
             </Dialog.Title>
             <Dialog.Close asChild>
               <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
@@ -71,14 +73,12 @@ export default function SlotEditModal({ slots, date }: SlotEditModalProps) {
 
           {slot && (
             <div className="space-y-4">
-              {/* 시간 정보 */}
               <div className="text-sm text-gray-500 dark:text-gray-400">
                 {format(parseISO(slot.start_at), 'HH:mm')} – {format(parseISO(slot.end_at), 'HH:mm')}
               </div>
 
-              {/* 제목 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">제목</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.title}</label>
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
@@ -87,9 +87,8 @@ export default function SlotEditModal({ slots, date }: SlotEditModalProps) {
                 />
               </div>
 
-              {/* 상태 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">상태</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.status}</label>
                 <div className="flex gap-2 flex-wrap">
                   {STATUS_OPTIONS.map((opt) => (
                     <button
@@ -107,7 +106,6 @@ export default function SlotEditModal({ slots, date }: SlotEditModalProps) {
                 </div>
               </div>
 
-              {/* 버튼 */}
               <div className="flex items-center justify-between pt-2">
                 {!confirmDelete ? (
                   <button
@@ -115,20 +113,20 @@ export default function SlotEditModal({ slots, date }: SlotEditModalProps) {
                     className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700"
                   >
                     <Trash2 className="w-4 h-4" />
-                    삭제
+                    {t.delete}
                   </button>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-red-600">정말 삭제할까요?</span>
-                    <button onClick={handleDelete} className="text-sm text-red-600 font-semibold hover:text-red-800">예</button>
-                    <button onClick={() => setConfirmDelete(false)} className="text-sm text-gray-500">아니오</button>
+                    <span className="text-sm text-red-600">{t.confirmDelete}</span>
+                    <button onClick={handleDelete} className="text-sm text-red-600 font-semibold hover:text-red-800">{t.yes}</button>
+                    <button onClick={() => setConfirmDelete(false)} className="text-sm text-gray-500">{t.no}</button>
                   </div>
                 )}
                 <button
                   onClick={handleSave}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
                 >
-                  저장
+                  {t.save}
                 </button>
               </div>
             </div>

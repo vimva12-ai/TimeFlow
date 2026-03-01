@@ -26,11 +26,14 @@ export interface TimeSlot {
   uid: string;       // Firebase Auth UID (Collection Group 쿼리용)
   planId: string;    // {uid}_{date}
   title: string;
-  start_at: string;  // ISO timestamp
-  end_at: string;    // ISO timestamp
+  start_at: string;  // ISO timestamp (PLAN 위치)
+  end_at: string;    // ISO timestamp (PLAN 위치)
   status: SlotStatus;
   sort_order: number;
   created_at: string;
+  // ACTUAL 전용 표시 위치 (PLAN과 독립적으로 이동 가능, 미수행 슬롯용)
+  actual_disp_start?: string;
+  actual_disp_end?: string;
 }
 
 export type TimeSlotInsert = {

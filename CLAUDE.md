@@ -160,7 +160,8 @@ function handlePointerDown(e, slot, top) {
 ```
 
 Key rules:
-- **No `e.preventDefault()`** in `handlePointerDown` — prevents cancelling subsequent `click` events on child buttons (Play button, etc.)
+- **No `e.preventDefault()`** in `handlePointerDown` — keeps subsequent `click` events on child buttons (Play button, etc.) working for short-press taps.
+- **`e.preventDefault()` IS called in `handlePointerUp` (drag branch only)** — prevents the click event that would fire after `pointerup` from triggering inner buttons (e.g., the Play button in not-started ActualColumn slots calling `onStart` and overriding the dragged position with current time).
 - `setPointerCapture` inside `setTimeout` ensures capture happens only after long-press threshold
 - `touch-action: none` CSS on draggable elements prevents browser scroll interference
 - Drag preview shown while dragging (dashed border overlay, z-index 5)

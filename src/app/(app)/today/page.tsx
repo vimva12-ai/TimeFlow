@@ -18,6 +18,7 @@ import { type SlotStatus } from '@/types/database';
 import { auth, db } from '@/lib/firebase/client';
 import { doc, collection, setDoc, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
 
 function formatFocus(minutes: number) {
   if (minutes < 60) return `${minutes}분`;
@@ -37,6 +38,7 @@ export default function TodayPage() {
   const { data: weeklyReport } = useWeeklyReport();
   const queryClient = useQueryClient();
   const stats = calcStats(plan);
+  const { t } = useI18n();
 
   const [statsOpen, setStatsOpen] = useState(false);
   const [modal, setModal] = useState<ModalState | null>(null);
@@ -93,7 +95,7 @@ export default function TodayPage() {
       )
     );
     queryClient.invalidateQueries({ queryKey: ['dailyPlan', tomorrow] });
-    alert(`${carry.length}개 항목을 내일로 이월했습니다.`);
+    alert(t.carryOverDone(carry.length));
   }
 
   const total = plan?.time_slots.length ?? 0;
@@ -101,7 +103,7 @@ export default function TodayPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* 날짜 헤더 — 압축 */}
+      {/* 날짜 헤더 */}
       <div className="px-3 py-1.5 flex items-center justify-between border-b border-gray-200 dark:border-gray-800">
         <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">{selectedDate}</span>
         <div className="flex items-center gap-1.5">
@@ -126,25 +128,25 @@ export default function TodayPage() {
         <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-white dark:bg-gray-800 rounded-lg p-2 text-center border border-gray-200 dark:border-gray-700">
-              <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">오늘 달성률</div>
+              <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">{t.todayRate}</div>
               <div className="text-base font-bold text-blue-600 dark:text-blue-400">
                 {total > 0 ? Math.round(stats.completionRate) : 0}%
               </div>
-              <div className="text-[10px] text-gray-400">{done}/{total}개</div>
+              <div className="text-[10px] text-gray-400">{done}/{total}</div>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-lg p-2 text-center border border-gray-200 dark:border-gray-700">
-              <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">집중 시간</div>
+              <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">{t.focusTime}</div>
               <div className="text-base font-bold text-green-600 dark:text-green-400">
                 {formatFocus(stats.focusMinutes)}
               </div>
-              <div className="text-[10px] text-gray-400">준수 {Math.round(stats.timePunctuality)}%</div>
+              <div className="text-[10px] text-gray-400">{t.punctuality(Math.round(stats.timePunctuality))}</div>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-lg p-2 text-center border border-gray-200 dark:border-gray-700">
-              <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">주간 평균</div>
+              <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">{t.weeklyAvg}</div>
               <div className="text-base font-bold text-purple-600 dark:text-purple-400">
                 {weeklyAvg !== null ? `${weeklyAvg}%` : '—'}
               </div>
-              <div className="text-[10px] text-gray-400">7일</div>
+              <div className="text-[10px] text-gray-400">{t.sevenDays}</div>
             </div>
           </div>
           {total > 0 && (
@@ -199,7 +201,7 @@ export default function TodayPage() {
           onClick={handleCarryOver}
           className="w-full py-1.5 text-xs text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
         >
-          미완료 항목 내일로 이월
+          {t.carryOver}
         </button>
       </div>
 

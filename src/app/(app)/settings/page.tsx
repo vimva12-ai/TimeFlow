@@ -3,21 +3,20 @@
 import { useState } from 'react';
 import NotificationToggle from '@/components/settings/NotificationToggle';
 import { useTimetableStore } from '@/store/timetableStore';
+import { useI18n } from '@/lib/i18n';
 
 const SLOT_HEIGHT_OPTIONS = [
-  { label: '좁게', value: 24, desc: '최대한 많이' },
-  { label: '보통', value: 36, desc: '기본 크기' },
-  { label: '넓게', value: 48, desc: '여유 있는 보기' },
+  { key: 'narrow' as const, value: 24, descKey: 'mostItems' as const },
+  { key: 'normal' as const, value: 36, descKey: 'defaultSize' as const },
+  { key: 'wide' as const, value: 48, descKey: 'spacious' as const },
 ];
 
 export default function SettingsPage() {
   const { startHour, endHour, slotHeight, setStartHour, setEndHour, setSlotHeight } = useTimetableStore();
+  const { t } = useI18n();
 
   const [draft, setDraft] = useState({ startHour, endHour, slotHeight });
-  const isDirty =
-    draft.startHour !== startHour ||
-    draft.endHour !== endHour ||
-    draft.slotHeight !== slotHeight;
+  const isDirty = draft.startHour !== startHour || draft.endHour !== endHour || draft.slotHeight !== slotHeight;
 
   function handleSave() {
     setStartHour(draft.startHour);
@@ -25,21 +24,17 @@ export default function SettingsPage() {
     setSlotHeight(draft.slotHeight);
   }
 
-  function handleReset() {
-    setDraft({ startHour, endHour, slotHeight });
-  }
-
   return (
     <div className="p-4 space-y-6 max-w-lg mx-auto">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">설정</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t.settings}</h1>
         <div className="flex items-center gap-2">
           {isDirty && (
             <button
-              onClick={handleReset}
+              onClick={() => setDraft({ startHour, endHour, slotHeight })}
               className="px-3 py-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
             >
-              취소
+              {t.cancel}
             </button>
           )}
           <button
@@ -51,20 +46,18 @@ export default function SettingsPage() {
                 : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed'
             }`}
           >
-            저장
+            {t.save}
           </button>
         </div>
       </div>
 
       {/* ── 화면 설정 ── */}
       <div className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800 space-y-5">
-        <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">화면 설정</h2>
+        <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">{t.screenSettings}</h2>
 
         {/* 슬롯 높이 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            슬롯 크기
-          </label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t.slotSize}</label>
           <div className="grid grid-cols-3 gap-2">
             {SLOT_HEIGHT_OPTIONS.map((opt) => (
               <button
@@ -76,8 +69,8 @@ export default function SettingsPage() {
                     : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                 }`}
               >
-                <div className="text-sm font-medium">{opt.label}</div>
-                <div className="text-[10px] opacity-70 mt-0.5">{opt.desc}</div>
+                <div className="text-sm font-medium">{t[opt.key]}</div>
+                <div className="text-[10px] opacity-70 mt-0.5">{t[opt.descKey]}</div>
               </button>
             ))}
           </div>
@@ -85,12 +78,10 @@ export default function SettingsPage() {
 
         {/* 시간 범위 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            시간 범위
-          </label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t.timeRange}</label>
           <div className="flex items-center gap-3">
             <div className="flex-1">
-              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">시작 시간</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t.startTime}</div>
               <select
                 value={draft.startHour}
                 onChange={(e) => {
@@ -104,11 +95,9 @@ export default function SettingsPage() {
                 ))}
               </select>
             </div>
-
             <span className="text-gray-400 dark:text-gray-500 mt-5">~</span>
-
             <div className="flex-1">
-              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">종료 시간</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t.endTime}</div>
               <select
                 value={draft.endHour}
                 onChange={(e) => {
@@ -118,21 +107,23 @@ export default function SettingsPage() {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {Array.from({ length: 24 }, (_, i) => i + 1).map((h) => (
-                  <option key={h} value={h}>{String(h % 24).padStart(2, '0')}:00{h === 24 ? ' (자정)' : ''}</option>
+                  <option key={h} value={h}>
+                    {String(h % 24).padStart(2, '0')}:00{h === 24 ? ` (${t.midnight})` : ''}
+                  </option>
                 ))}
               </select>
             </div>
           </div>
           <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5">
-            현재: {String(draft.startHour).padStart(2, '0')}:00 ~ {String(draft.endHour % 24).padStart(2, '0')}:00
-            ({draft.endHour - draft.startHour}시간 표시)
+            {t.current}: {String(draft.startHour).padStart(2, '0')}:00 ~ {String(draft.endHour % 24).padStart(2, '0')}:00
+            ({t.hoursShown(draft.endHour - draft.startHour)})
           </p>
         </div>
       </div>
 
       {/* ── 알림 설정 ── */}
       <div className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800">
-        <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3">알림 설정</h2>
+        <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3">{t.notificationSettings}</h2>
         <NotificationToggle />
       </div>
     </div>

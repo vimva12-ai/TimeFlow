@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, memo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import clsx from 'clsx';
-import { format, parseISO, addMinutes } from 'date-fns';
+import { format, parseISO, addMinutes, differenceInMinutes } from 'date-fns';
 import { useTimetableStore } from '@/store/timetableStore';
 import { type TimeSlotWithLogs } from '@/types/database';
 import { SLOT_MINUTES, slotIndex, slotSpan } from './TimeGrid';
-import { useLongPress } from '@/hooks/useLongPress';
 
 function statusColor(status: string) {
   switch (status) {
@@ -26,50 +25,6 @@ function statusLabel(status: string) {
   }
 }
 
-interface SlotButtonProps {
-  slot: TimeSlotWithLogs;
-  top: number;
-  height: number;
-  isDragging: boolean;
-  isAnyDragging: boolean;
-  onLongPressStart: (e: React.MouseEvent | React.TouchEvent) => void;
-  onClickSlot: () => void;
-}
-
-const SlotButton = memo(function SlotButton({
-  slot, top, height, isDragging, isAnyDragging, onLongPressStart, onClickSlot,
-}: SlotButtonProps) {
-  const handlers = useLongPress({
-    threshold: 500,
-    onLongPress: onLongPressStart,
-    onClick: onClickSlot,
-  });
-
-  return (
-    <button
-      data-slot="true"
-      {...handlers}
-      className={clsx(
-        'absolute left-0.5 right-0.5 rounded-sm border-l-4 px-1.5 text-left text-[11px] overflow-hidden transition-opacity z-[2] select-none',
-        statusColor(slot.status),
-        isDragging ? 'opacity-30' : 'hover:opacity-80',
-        isAnyDragging && !isDragging ? 'pointer-events-none' : '',
-      )}
-      style={{ top: top + 1, height: height - 2, cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
-    >
-      <div className="font-semibold truncate leading-tight">{slot.title}</div>
-      {height >= 36 && (
-        <div className="opacity-70 text-[10px] leading-tight">
-          {format(parseISO(slot.start_at), 'HH:mm')}–{format(parseISO(slot.end_at), 'HH:mm')}
-        </div>
-      )}
-      {height >= 52 && (
-        <div className="text-[9px] opacity-60 leading-tight">{statusLabel(slot.status)}</div>
-      )}
-    </button>
-  );
-});
-
 interface PlanColumnProps {
   slots: TimeSlotWithLogs[];
   planId: string;
@@ -77,53 +32,87 @@ interface PlanColumnProps {
   onMoveSlot?: (slotId: string, newStart: string, newEnd: string) => void;
 }
 
-interface DragState {
+interface DragData {
   slotId: string;
-  slotHeightPx: number;
-  slotDurationMin: number;
+  durationMin: number;
   offsetY: number;
-  currentY: number;
   columnRect: DOMRect;
 }
 
-export default function PlanColumn({ slots, planId, date, onMoveSlot }: PlanColumnProps) {
+const LONG_PRESS_MS = 450;
+const CANCEL_MOVE_PX = 8;
+
+export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps) {
   const { setEditingSlotId, startHour, endHour, slotHeight } = useTimetableStore();
   const totalSlots = ((endHour - startHour) * 60) / SLOT_MINUTES;
   const columnRef = useRef<HTMLDivElement>(null);
-  const [drag, setDrag] = useState<DragState | null>(null);
-  const dragRef = useRef<DragState | null>(null);
 
-  useEffect(() => { dragRef.current = drag; }, [drag]);
+  // 드래그 중인 슬롯 ID (UI 트리거 역할만, 변경 시에만 window 리스너 재등록)
+  const [draggingSlotId, setDraggingSlotId] = useState<string | null>(null);
+  // 미리보기 위치 (별도 state - 리스너 재등록 없이 DOM만 업데이트)
+  const [previewIdx, setPreviewIdx] = useState(0);
 
-  const snapIndex = useCallback((clientY: number, offsetY: number, rect: DOMRect) => {
-    const relY = clientY - rect.top - offsetY;
+  // ref로 관리: 렌더 트리거 없이 최신값 유지
+  const dragDataRef = useRef<DragData | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startPosRef = useRef<{ x: number; y: number } | null>(null);
+  const longPressedRef = useRef(false);
+
+  function clearTimer() {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+  }
+
+  function snapIdxFromClientY(clientY: number, d: DragData) {
+    const relY = clientY - d.columnRect.top - d.offsetY;
     return Math.max(0, Math.min(totalSlots - 1, Math.floor(relY / slotHeight)));
-  }, [totalSlots, slotHeight]);
+  }
 
-  const commitDrop = useCallback((clientY: number) => {
-    const d = dragRef.current;
-    if (!d || !onMoveSlot) { setDrag(null); return; }
-    const idx = snapIndex(clientY, d.offsetY, d.columnRect);
+  function buildNewTimes(idx: number, durationMin: number) {
     const totalMins = startHour * 60 + idx * SLOT_MINUTES;
     const h = Math.floor(totalMins / 60) % 24;
     const m = totalMins % 60;
     const newStart = new Date(`${date}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`);
-    const newEnd = addMinutes(newStart, d.slotDurationMin);
-    onMoveSlot(d.slotId, newStart.toISOString(), newEnd.toISOString());
-    setDrag(null);
-  }, [date, snapIndex, startHour, onMoveSlot]);
+    return { newStart: newStart.toISOString(), newEnd: addMinutes(newStart, durationMin).toISOString() };
+  }
 
+  // ── window 리스너: draggingSlotId 변경 시에만 attach/detach ──
   useEffect(() => {
-    if (!drag) return;
-    const onMouseMove = (e: MouseEvent) => {
-      setDrag((prev) => prev ? { ...prev, currentY: e.clientY } : null);
-    };
-    const onMouseUp = (e: MouseEvent) => commitDrop(e.clientY);
-    const onTouchMove = (e: TouchEvent) => {
+    if (!draggingSlotId) return;
+
+    function onMouseMove(e: MouseEvent) {
+      const d = dragDataRef.current;
+      if (!d) return;
+      setPreviewIdx(snapIdxFromClientY(e.clientY, d));
+    }
+
+    function onMouseUp(e: MouseEvent) {
+      const d = dragDataRef.current;
+      if (d && onMoveSlot) {
+        const { newStart, newEnd } = buildNewTimes(snapIdxFromClientY(e.clientY, d), d.durationMin);
+        onMoveSlot(d.slotId, newStart, newEnd);
+      }
+      dragDataRef.current = null;
+      longPressedRef.current = false;
+      setDraggingSlotId(null);
+    }
+
+    function onTouchMove(e: TouchEvent) {
       e.preventDefault();
-      setDrag((prev) => prev ? { ...prev, currentY: e.touches[0].clientY } : null);
-    };
-    const onTouchEnd = (e: TouchEvent) => commitDrop(e.changedTouches[0].clientY);
+      const d = dragDataRef.current;
+      if (!d) return;
+      setPreviewIdx(snapIdxFromClientY(e.touches[0].clientY, d));
+    }
+
+    function onTouchEnd(e: TouchEvent) {
+      const d = dragDataRef.current;
+      if (d && onMoveSlot) {
+        const { newStart, newEnd } = buildNewTimes(snapIdxFromClientY(e.changedTouches[0].clientY, d), d.durationMin);
+        onMoveSlot(d.slotId, newStart, newEnd);
+      }
+      dragDataRef.current = null;
+      longPressedRef.current = false;
+      setDraggingSlotId(null);
+    }
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
@@ -135,59 +124,139 @@ export default function PlanColumn({ slots, planId, date, onMoveSlot }: PlanColu
       window.removeEventListener('touchmove', onTouchMove);
       window.removeEventListener('touchend', onTouchEnd);
     };
-  }, [drag, commitDrop]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draggingSlotId]); // draggingSlotId 변경 시에만! mousemove마다 재등록 방지
 
-  // 드래그 미리보기 위치
-  let dragPreviewTop = 0;
-  let dragSlot: TimeSlotWithLogs | null = null;
-  if (drag) {
-    dragSlot = slots.find((s) => s.id === drag.slotId) ?? null;
-    const idx = snapIndex(drag.currentY, drag.offsetY, drag.columnRect);
-    dragPreviewTop = idx * slotHeight;
+  // ── 컨테이너 수준 non-passive touchstart (스크롤 방지) ──
+  useEffect(() => {
+    const el = columnRef.current;
+    if (!el) return;
+
+    function handleTouchStart(e: TouchEvent) {
+      const slotEl = (e.target as Element).closest('[data-plan-slot]');
+      if (!slotEl) return;
+      const slotId = slotEl.getAttribute('data-plan-slot')!;
+      const slot = slots.find((s) => s.id === slotId);
+      if (!slot) return;
+
+      const touch = e.touches[0];
+      startPosRef.current = { x: touch.clientX, y: touch.clientY };
+      longPressedRef.current = false;
+      clearTimer();
+
+      timerRef.current = setTimeout(() => {
+        const rect = el!.getBoundingClientRect();
+        const top = slotIndex(slot.start_at, startHour) * slotHeight;
+        const durationMin = Math.max(30, differenceInMinutes(parseISO(slot.end_at), parseISO(slot.start_at)));
+        longPressedRef.current = true;
+        dragDataRef.current = {
+          slotId: slot.id,
+          durationMin,
+          offsetY: touch.clientY - rect.top - top,
+          columnRect: rect,
+        };
+        setPreviewIdx(Math.round(top / slotHeight));
+        setDraggingSlotId(slot.id);
+      }, LONG_PRESS_MS);
+    }
+
+    el?.addEventListener('touchstart', handleTouchStart, { passive: false });
+    return () => el?.removeEventListener('touchstart', handleTouchStart);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slots, slotHeight, startHour]);
+
+  // ── 마우스 핸들러 (요소별) ──
+  function handleMouseDown(e: React.MouseEvent, slot: TimeSlotWithLogs, top: number) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    startPosRef.current = { x: e.clientX, y: e.clientY };
+    longPressedRef.current = false;
+    clearTimer();
+
+    timerRef.current = setTimeout(() => {
+      const rect = columnRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const durationMin = Math.max(30, differenceInMinutes(parseISO(slot.end_at), parseISO(slot.start_at)));
+      longPressedRef.current = true;
+      dragDataRef.current = {
+        slotId: slot.id,
+        durationMin,
+        offsetY: e.clientY - rect.top - top,
+        columnRect: rect,
+      };
+      setPreviewIdx(Math.round(top / slotHeight));
+      setDraggingSlotId(slot.id);
+    }, LONG_PRESS_MS);
   }
+
+  function handleMouseMove(e: React.MouseEvent) {
+    if (longPressedRef.current || !startPosRef.current) return;
+    const dx = Math.abs(e.clientX - startPosRef.current.x);
+    const dy = Math.abs(e.clientY - startPosRef.current.y);
+    if (dx > CANCEL_MOVE_PX || dy > CANCEL_MOVE_PX) clearTimer();
+  }
+
+  function handleMouseUp(slot: TimeSlotWithLogs) {
+    clearTimer();
+    if (!longPressedRef.current) {
+      setEditingSlotId(slot.id);
+    }
+    // 드래그 중이었으면 window mouseup이 처리
+  }
+
+  const dragSlot = draggingSlotId ? slots.find((s) => s.id === draggingSlotId) : null;
 
   return (
     <div ref={columnRef} className="relative w-full" style={{ height: totalSlots * slotHeight }}>
       {slots.map((slot) => {
         const top = slotIndex(slot.start_at, startHour) * slotHeight;
         const height = slotSpan(slot.start_at, slot.end_at) * slotHeight;
-        const isDragging = drag?.slotId === slot.id;
-
-        function handleLongPressStart(e: React.MouseEvent | React.TouchEvent) {
-          e.stopPropagation();
-          const rect = columnRef.current?.getBoundingClientRect();
-          if (!rect) return;
-          const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-          const durationMin = (new Date(slot.end_at).getTime() - new Date(slot.start_at).getTime()) / 60000;
-          const offsetY = clientY - rect.top - top;
-          setDrag({ slotId: slot.id, slotHeightPx: height, slotDurationMin: durationMin, offsetY, currentY: clientY, columnRect: rect });
-        }
+        const isDragging = draggingSlotId === slot.id;
 
         return (
-          <SlotButton
+          <div
             key={slot.id}
-            slot={slot}
-            top={top}
-            height={height}
-            isDragging={isDragging}
-            isAnyDragging={!!drag}
-            onLongPressStart={handleLongPressStart}
-            onClickSlot={() => setEditingSlotId(slot.id)}
-          />
+            data-slot="true"
+            data-plan-slot={slot.id}
+            className={clsx(
+              'absolute left-0.5 right-0.5 rounded-sm border-l-4 px-1.5 text-left text-[11px] overflow-hidden z-[2] select-none',
+              statusColor(slot.status),
+              isDragging ? 'opacity-30' : 'hover:opacity-80',
+              draggingSlotId && !isDragging ? 'pointer-events-none' : 'cursor-grab active:cursor-grabbing',
+            )}
+            style={{ top: top + 1, height: height - 2, touchAction: 'none' }}
+            onMouseDown={(e) => handleMouseDown(e, slot, top)}
+            onMouseMove={handleMouseMove}
+            onMouseUp={() => handleMouseUp(slot)}
+            onMouseLeave={clearTimer}
+          >
+            <div className="font-semibold truncate leading-tight pointer-events-none">{slot.title}</div>
+            {height >= 36 && (
+              <div className="opacity-70 text-[10px] leading-tight pointer-events-none">
+                {format(parseISO(slot.start_at), 'HH:mm')}–{format(parseISO(slot.end_at), 'HH:mm')}
+              </div>
+            )}
+            {height >= 52 && (
+              <div className="text-[9px] opacity-60 leading-tight pointer-events-none">{statusLabel(slot.status)}</div>
+            )}
+          </div>
         );
       })}
 
       {/* 드래그 미리보기 */}
-      {drag && dragSlot && (
-        <div
-          className="absolute left-0.5 right-0.5 rounded-sm border-2 border-dashed border-blue-500 bg-blue-200/50 dark:bg-blue-900/40 z-[5] pointer-events-none"
-          style={{ top: dragPreviewTop + 1, height: drag.slotHeightPx - 2 }}
-        >
-          <div className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 px-1 pt-0.5 truncate">
-            {dragSlot.title}
+      {draggingSlotId && dragSlot && (() => {
+        const h = slotSpan(dragSlot.start_at, dragSlot.end_at) * slotHeight;
+        return (
+          <div
+            className="absolute left-0.5 right-0.5 rounded-sm border-2 border-dashed border-blue-500 bg-blue-100/70 dark:bg-blue-900/50 z-[5] pointer-events-none"
+            style={{ top: previewIdx * slotHeight + 1, height: h - 2 }}
+          >
+            <div className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 px-1 pt-0.5 truncate">
+              {dragSlot.title}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

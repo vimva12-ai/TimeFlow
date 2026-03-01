@@ -35,7 +35,10 @@ export default function WeeklyPage() {
     return <div className="flex items-center justify-center h-64 text-gray-400">로딩 중...</div>;
   }
 
-  if (!report || report.length === 0) {
+  // 7일치 배열이 반환되지만 실제 일정이 하나도 없을 때만 빈 화면 표시
+  const hasAnyData = report && report.some((d) => d.totalSlots > 0);
+
+  if (!report || !hasAnyData) {
     return (
       <div className="p-4 max-w-2xl mx-auto space-y-6">
         <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">주간 리포트</h1>

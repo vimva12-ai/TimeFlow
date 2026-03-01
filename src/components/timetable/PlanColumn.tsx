@@ -116,6 +116,8 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
   function handlePointerUp(e: React.PointerEvent, slot: TimeSlotWithLogs) {
     clearTimer();
     if (longPressedRef.current) {
+      // 드래그 완료 후 click 이벤트 차단 (스냅된 위치 유지)
+      e.preventDefault();
       const d = dragDataRef.current;
       if (d && onMoveSlot) {
         const { newStart, newEnd } = buildNewTimes(snapMin(e.clientY, d), d.durationMin);

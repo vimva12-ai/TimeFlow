@@ -169,6 +169,8 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
   function handlePointerUp(e: React.PointerEvent, slot: TimeSlotWithLogs) {
     clearTimer();
     if (longPressedRef.current) {
+      // 드래그 완료 후 내부 버튼(Play 등)의 click 이벤트 차단
+      e.preventDefault();
       const d = dragDataRef.current;
       if (d && onMoveSlot) {
         const { newStart, newEnd } = buildNewTimes(snapMin(e.clientY, d), d.durationMin, d.dateStr);

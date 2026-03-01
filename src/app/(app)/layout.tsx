@@ -5,6 +5,7 @@ import { CalendarDays, BarChart2, Settings } from 'lucide-react';
 import { adminAuth } from '@/lib/firebase/admin';
 import DatePicker from '@/components/nav/DatePicker';
 import ThemeToggle from '@/components/ThemeToggle';
+import LanguageSelector from '@/components/LanguageSelector';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
@@ -27,8 +28,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Link href="/today" className="text-base font-bold text-blue-600">
             TimeFlow
           </Link>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <div id="achievement-badges-portal" />
+            <LanguageSelector />
             <ThemeToggle />
           </div>
         </div>

@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import NotificationToggle from '@/components/settings/NotificationToggle';
 import { useTimetableStore } from '@/store/timetableStore';
 
@@ -12,9 +13,48 @@ const SLOT_HEIGHT_OPTIONS = [
 export default function SettingsPage() {
   const { startHour, endHour, slotHeight, setStartHour, setEndHour, setSlotHeight } = useTimetableStore();
 
+  const [draft, setDraft] = useState({ startHour, endHour, slotHeight });
+  const isDirty =
+    draft.startHour !== startHour ||
+    draft.endHour !== endHour ||
+    draft.slotHeight !== slotHeight;
+
+  function handleSave() {
+    setStartHour(draft.startHour);
+    setEndHour(draft.endHour);
+    setSlotHeight(draft.slotHeight);
+  }
+
+  function handleReset() {
+    setDraft({ startHour, endHour, slotHeight });
+  }
+
   return (
     <div className="p-4 space-y-6 max-w-lg mx-auto">
-      <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">설정</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">설정</h1>
+        <div className="flex items-center gap-2">
+          {isDirty && (
+            <button
+              onClick={handleReset}
+              className="px-3 py-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+            >
+              취소
+            </button>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={!isDirty}
+            className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+              isDirty
+                ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed'
+            }`}
+          >
+            저장
+          </button>
+        </div>
+      </div>
 
       {/* ── 화면 설정 ── */}
       <div className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800 space-y-5">
@@ -29,9 +69,9 @@ export default function SettingsPage() {
             {SLOT_HEIGHT_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
-                onClick={() => setSlotHeight(opt.value)}
+                onClick={() => setDraft((d) => ({ ...d, slotHeight: opt.value }))}
                 className={`p-2.5 rounded-lg border text-center transition-colors ${
-                  slotHeight === opt.value
+                  draft.slotHeight === opt.value
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                     : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                 }`}
@@ -52,10 +92,10 @@ export default function SettingsPage() {
             <div className="flex-1">
               <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">시작 시간</div>
               <select
-                value={startHour}
+                value={draft.startHour}
                 onChange={(e) => {
                   const v = Number(e.target.value);
-                  if (v < endHour - 1) setStartHour(v);
+                  if (v < draft.endHour - 1) setDraft((d) => ({ ...d, startHour: v }));
                 }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
@@ -70,10 +110,10 @@ export default function SettingsPage() {
             <div className="flex-1">
               <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">종료 시간</div>
               <select
-                value={endHour}
+                value={draft.endHour}
                 onChange={(e) => {
                   const v = Number(e.target.value);
-                  if (v > startHour + 1) setEndHour(v);
+                  if (v > draft.startHour + 1) setDraft((d) => ({ ...d, endHour: v }));
                 }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
@@ -84,8 +124,8 @@ export default function SettingsPage() {
             </div>
           </div>
           <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5">
-            현재: {String(startHour).padStart(2, '0')}:00 ~ {String(endHour % 24).padStart(2, '0')}:00
-            ({endHour - startHour}시간 표시)
+            현재: {String(draft.startHour).padStart(2, '0')}:00 ~ {String(draft.endHour % 24).padStart(2, '0')}:00
+            ({draft.endHour - draft.startHour}시간 표시)
           </p>
         </div>
       </div>

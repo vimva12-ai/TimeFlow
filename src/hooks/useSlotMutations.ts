@@ -256,5 +256,91 @@ export function useSlotMutations(date: string) {
     retryDelay: 5000,
   });
 
-  return { createSlot, updateSlotStatus, updateSlotTitle, deleteSlot, logActual, createActualEntry };
+  // ── updateActualLog: actual_log의 시간 수정 ──────────────────
+  const updateActualLog = useMutation({
+    mutationFn: async ({
+      slotId,
+      logId,
+      actual_start,
+      actual_end,
+    }: {
+      slotId: string;
+      logId: string;
+      actual_start: string;
+      actual_end: string;
+    }) => {
+      const uid = auth.currentUser?.uid ?? '';
+      const planId = `${uid}_${date}`;
+      const logRef = doc(
+        db,
+        'users', uid,
+        'daily_plans', planId,
+        'time_slots', slotId,
+        'actual_logs', logId,
+      );
+      await updateDoc(logRef, { actual_start, actual_end });
+    },
+    onMutate: async ({ slotId, logId, actual_start, actual_end }) => {
+      await queryClient.cancelQueries({ queryKey: qKey });
+      const previous = queryClient.getQueryData<DailyPlanWithSlots>(qKey);
+      if (previous) {
+        queryClient.setQueryData<DailyPlanWithSlots>(qKey, {
+          ...previous,
+          time_slots: previous.time_slots.map((s) =>
+            s.id === slotId
+              ? {
+                  ...s,
+                  actual_logs: s.actual_logs.map((l) =>
+                    l.id === logId ? { ...l, actual_start, actual_end } : l
+                  ),
+                }
+              : s
+          ),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(qKey, ctx.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: qKey }),
+    retry: 1,
+    retryDelay: 5000,
+  });
+
+  // ── updateSlotTime: 슬롯 시간(start_at/end_at) 수정 ─────────
+  const updateSlotTime = useMutation({
+    mutationFn: async ({
+      slotId,
+      start_at,
+      end_at,
+    }: {
+      slotId: string;
+      start_at: string;
+      end_at: string;
+    }) => {
+      await updateDoc(getSlotRef(slotId), { start_at, end_at });
+    },
+    onMutate: async ({ slotId, start_at, end_at }) => {
+      await queryClient.cancelQueries({ queryKey: qKey });
+      const previous = queryClient.getQueryData<DailyPlanWithSlots>(qKey);
+      if (previous) {
+        queryClient.setQueryData<DailyPlanWithSlots>(qKey, {
+          ...previous,
+          time_slots: previous.time_slots.map((s) =>
+            s.id === slotId ? { ...s, start_at, end_at } : s
+          ),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(qKey, ctx.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: qKey }),
+    retry: 1,
+    retryDelay: 5000,
+  });
+
+  return { createSlot, updateSlotStatus, updateSlotTitle, deleteSlot, logActual, createActualEntry, updateActualLog, updateSlotTime };
 }

@@ -33,7 +33,7 @@ interface ModalState {
 export default function TodayPage() {
   const { selectedDate } = useTimetableStore();
   const { data: plan, isLoading } = useDailyPlan(selectedDate);
-  const { createSlot, updateSlotStatus, logActual, createActualEntry } = useSlotMutations(selectedDate);
+  const { createSlot, updateSlotStatus, logActual, createActualEntry, updateActualLog, updateSlotTime } = useSlotMutations(selectedDate);
   const { data: weeklyReport } = useWeeklyReport();
   const queryClient = useQueryClient();
   const stats = calcStats(plan);
@@ -169,6 +169,9 @@ export default function TodayPage() {
               slots={plan.time_slots}
               planId={plan.id}
               date={selectedDate}
+              onMoveSlot={(slotId, newStart, newEnd) =>
+                updateSlotTime.mutate({ slotId, start_at: newStart, end_at: newEnd })
+              }
             />
           ) : null
         }
@@ -179,6 +182,12 @@ export default function TodayPage() {
               onStart={handleStart}
               onComplete={handleComplete}
               onChangeStatus={(slotId, status) => updateSlotStatus.mutate({ slotId, status })}
+              onUpdateLog={(slotId, logId, actualStart, actualEnd) =>
+                updateActualLog.mutate({ slotId, logId, actual_start: actualStart, actual_end: actualEnd })
+              }
+              onMoveSlot={(slotId, newStart, newEnd) =>
+                updateSlotTime.mutate({ slotId, start_at: newStart, end_at: newEnd })
+              }
             />
           ) : null
         }

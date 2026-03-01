@@ -62,7 +62,12 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
   function snapMin(clientY: number, d: DragData): number {
     const relY = clientY - d.columnRect.top - d.offsetY;
     const totalMins = totalSlots * SLOT_MINUTES;
-    return Math.max(0, Math.min(totalMins - 1, Math.round(relY / (slotHeight / SLOT_MINUTES))));
+    const raw = Math.max(0, Math.min(totalMins - 1, Math.round(relY / (slotHeight / SLOT_MINUTES))));
+    // 30분 경계에서 ±5분 이내면 스냅
+    const nearest30 = Math.round(raw / SLOT_MINUTES) * SLOT_MINUTES;
+    return Math.abs(raw - nearest30) <= 5
+      ? Math.max(0, Math.min(totalMins - 1, nearest30))
+      : raw;
   }
 
   function buildNewTimes(offsetMin: number, durationMin: number) {

@@ -33,11 +33,12 @@ function getTimeFromClick(
 
   const rect = e.currentTarget.getBoundingClientRect();
   const relY = e.clientY - rect.top;           // getBoundingClientRect 는 스크롤 반영
-  const idx = Math.floor(relY / slotHeight);
-  if (idx < 0 || idx >= totalSlots) return null;
+  const maxMins = totalSlots * SLOT_MINUTES;
+  const offsetMins = Math.round(relY / (slotHeight / SLOT_MINUTES));
+  if (offsetMins < 0 || offsetMins >= maxMins) return null;
 
-  const totalMins = startHour * 60 + idx * SLOT_MINUTES;
-  return { h: Math.floor(totalMins / 60) % 24, m: totalMins % 60 };
+  const absoluteMins = startHour * 60 + offsetMins;
+  return { h: Math.floor(absoluteMins / 60) % 24, m: absoluteMins % 60 };
 }
 
 interface TimeGridProps {

@@ -59,13 +59,14 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
   }
 
-  function snapIdx(clientY: number, d: DragData): number {
+  function snapMin(clientY: number, d: DragData): number {
     const relY = clientY - d.columnRect.top - d.offsetY;
-    return Math.max(0, Math.min(totalSlots - 1, Math.floor(relY / slotHeight)));
+    const totalMins = totalSlots * SLOT_MINUTES;
+    return Math.max(0, Math.min(totalMins - 1, Math.round(relY / (slotHeight / SLOT_MINUTES))));
   }
 
-  function buildNewTimes(idx: number, durationMin: number) {
-    const totalMins = startHour * 60 + idx * SLOT_MINUTES;
+  function buildNewTimes(offsetMin: number, durationMin: number) {
+    const totalMins = startHour * 60 + offsetMin;
     const h = Math.floor(totalMins / 60) % 24;
     const m = totalMins % 60;
     const newStart = new Date(`${date}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`);
@@ -85,11 +86,11 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
     timerRef.current = setTimeout(() => {
       const rect = columnRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const durationMin = Math.max(30, differenceInMinutes(parseISO(slot.end_at), parseISO(slot.start_at)));
+      const durationMin = Math.max(1, differenceInMinutes(parseISO(slot.end_at), parseISO(slot.start_at)));
       longPressedRef.current = true;
       dragDataRef.current = { slotId: slot.id, durationMin, offsetY: initY - rect.top - top, columnRect: rect };
       try { el.setPointerCapture(pointerId); } catch {}
-      setPreviewIdx(Math.round(top / slotHeight));
+      setPreviewIdx(Math.round(top / (slotHeight / SLOT_MINUTES)));
       setDraggingSlotId(slot.id);
     }, LONG_PRESS_MS);
   }
@@ -104,7 +105,7 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
       return;
     }
     const d = dragDataRef.current;
-    if (d) setPreviewIdx(snapIdx(e.clientY, d));
+    if (d) setPreviewIdx(snapMin(e.clientY, d));
   }
 
   function handlePointerUp(e: React.PointerEvent, slot: TimeSlotWithLogs) {
@@ -112,7 +113,7 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
     if (longPressedRef.current) {
       const d = dragDataRef.current;
       if (d && onMoveSlot) {
-        const { newStart, newEnd } = buildNewTimes(snapIdx(e.clientY, d), d.durationMin);
+        const { newStart, newEnd } = buildNewTimes(snapMin(e.clientY, d), d.durationMin);
         onMoveSlot(d.slotId, newStart, newEnd);
       }
       dragDataRef.current = null;
@@ -177,7 +178,7 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
         return (
           <div
             className="absolute left-0.5 right-0.5 rounded-sm border-2 border-dashed border-blue-500 bg-blue-100/70 dark:bg-blue-900/50 z-[5] pointer-events-none"
-            style={{ top: previewIdx * slotHeight + 1, height: h - 2 }}
+            style={{ top: previewIdx * (slotHeight / SLOT_MINUTES) + 1, height: h - 2 }}
           >
             <div className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 px-1 pt-0.5 truncate">
               {dragSlot.title}

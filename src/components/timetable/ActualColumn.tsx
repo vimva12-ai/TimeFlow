@@ -95,13 +95,14 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
   }
 
-  function snapIdx(clientY: number, d: DragData): number {
+  function snapMin(clientY: number, d: DragData): number {
     const relY = clientY - d.columnRect.top - d.offsetY;
-    return Math.max(0, Math.min(totalSlots - 1, Math.floor(relY / slotHeight)));
+    const totalMins = totalSlots * SLOT_MINUTES;
+    return Math.max(0, Math.min(totalMins - 1, Math.round(relY / (slotHeight / SLOT_MINUTES))));
   }
 
-  function buildNewTimes(idx: number, durationMin: number, dateStr: string) {
-    const totalMins = startHour * 60 + idx * SLOT_MINUTES;
+  function buildNewTimes(offsetMin: number, durationMin: number, dateStr: string) {
+    const totalMins = startHour * 60 + offsetMin;
     const h = Math.floor(totalMins / 60) % 24;
     const m = totalMins % 60;
     const newStart = new Date(`${dateStr}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`);
@@ -136,12 +137,12 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
       const log = slot.actual_logs[0];
       const { displayStart: ds2, displayEnd: de2 } = getDisplayTimes(slot);
       const durationMin = (log?.actual_start && log?.actual_end)
-        ? Math.max(30, differenceInMinutes(parseISO(log.actual_end), parseISO(log.actual_start)))
-        : Math.max(30, differenceInMinutes(parseISO(de2), parseISO(ds2)));
+        ? Math.max(1, differenceInMinutes(parseISO(log.actual_end), parseISO(log.actual_start)))
+        : Math.max(1, differenceInMinutes(parseISO(de2), parseISO(ds2)));
       longPressedRef.current = true;
       dragDataRef.current = { slotId: slot.id, durationMin, offsetY: initY - rect.top - top, columnRect: rect, dateStr };
       try { el.setPointerCapture(pointerId); } catch {}
-      setPreviewIdx(Math.round(top / slotHeight));
+      setPreviewIdx(Math.round(top / (slotHeight / SLOT_MINUTES)));
       setDraggingSlotId(slot.id);
     }, LONG_PRESS_MS);
   }
@@ -156,7 +157,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
       return;
     }
     const d = dragDataRef.current;
-    if (d) setPreviewIdx(snapIdx(e.clientY, d));
+    if (d) setPreviewIdx(snapMin(e.clientY, d));
   }
 
   function handlePointerUp(e: React.PointerEvent, slot: TimeSlotWithLogs) {
@@ -164,7 +165,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
     if (longPressedRef.current) {
       const d = dragDataRef.current;
       if (d && onMoveSlot) {
-        const { newStart, newEnd } = buildNewTimes(snapIdx(e.clientY, d), d.durationMin, d.dateStr);
+        const { newStart, newEnd } = buildNewTimes(snapMin(e.clientY, d), d.durationMin, d.dateStr);
         onMoveSlot(d.slotId, newStart, newEnd);
       }
       dragDataRef.current = null;
@@ -342,7 +343,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
         return (
           <div
             className="absolute left-0.5 right-0.5 rounded-sm border-2 border-dashed border-green-500 bg-green-100/70 dark:bg-green-900/50 z-[5] pointer-events-none"
-            style={{ top: previewIdx * slotHeight + 1, height: h - 2 }}
+            style={{ top: previewIdx * (slotHeight / SLOT_MINUTES) + 1, height: h - 2 }}
           >
             <div className="text-[10px] font-semibold text-green-700 dark:text-green-300 px-1 pt-0.5 truncate">{dragSlot.title}</div>
           </div>
@@ -355,6 +356,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
           data-popup="true"
           style={{ position: 'fixed', top: popup.y, left: popup.x, zIndex: 9999, transform: 'translateY(-50%)' }}
           className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg p-1 flex flex-col gap-1 min-w-[120px]"
+          onClick={(e) => e.stopPropagation()}
         >
           {popup.type === 'progress' ? (
             <>
@@ -409,6 +411,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
           data-edit-time="true"
           style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 10000 }}
           className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-2xl p-4 w-64"
+          onClick={(e) => e.stopPropagation()}
         >
           <div className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3">실제 시간 수정</div>
           <div className="space-y-3">

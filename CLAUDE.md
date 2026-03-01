@@ -122,7 +122,7 @@ The grid is built from three components working together:
 
 - **`PlanColumn.tsx`** — renders planned slot buttons with `data-slot="true"`. On click → `setEditingSlotId(slot.id)` (opens SlotEditModal). Props: `slots`, `planId`, `date`.
 
-- **`ActualColumn.tsx`** — renders actual slot containers with `data-slot="true"`. Props: `slots`, `onStart`, `onComplete`, `onChangeStatus`, `onUpdateLog`, `onMoveSlot`.
+- **`ActualColumn.tsx`** — renders actual slot containers with `data-slot="true"`. Props: `slots`, `onStart`, `onComplete`, `onChangeStatus`, `onUpdateLog`, `onMoveSlot`, `onUpdateSlotTime`.
   - **Display position priority** (`getDisplayTimes`):
     1. Not started + `actual_disp_start` set → use `actual_disp_start`/`actual_disp_end` (ACTUAL-only position)
     2. Not started, no override → fall back to PLAN `start_at`/`end_at`
@@ -130,10 +130,12 @@ The grid is built from three components working together:
     4. Completed → `actual_start`/`actual_end` from log
   - **`actual_disp_start`/`actual_disp_end`** on `TimeSlot` — optional fields for ACTUAL-only display position. Set via `updateActualDispTime` when a not-started slot is dragged. PLAN position (`start_at`/`end_at`) is never modified by ACTUAL drag.
   - **Three render modes** based on slot state and height:
-    1. **Not started**: Play button → calls `onStart(slotId)`. `canDrag = true`.
-    2. **In-progress, height ≥ `ACTION_THRESHOLD` (60px)**: inline 완료/부분/건너뜀 buttons → calls `onComplete(slotId, status, end)`. `canDrag = false`.
-    3. **In-progress, height < 60px**: compact `▶ HH:mm` button → opens portal popup. `canDrag = false`.
-  - **Completed slots**: `canDrag = true`. Short press → right-side portal popup with status buttons + "시간 수정". Drag → calls `onMoveSlot` → routed to `updateActualLog` in today/page.tsx.
+    1. **Not started**: Play button (full area) + clock icon (top-right corner, opens time edit). `canDrag = true`.
+    2. **In-progress, height ≥ `ACTION_THRESHOLD` (60px)**: inline 완료/부분/건너뜀/시간 buttons. `canDrag = false`.
+    3. **In-progress, height < 60px**: compact `▶ HH:mm` button → opens portal popup with actions + 시간 수정. `canDrag = false`.
+  - **Completed slots**: `canDrag = true`. Short press → portal popup with status buttons + "시간 수정" (edits `actual_log`). Drag → calls `onMoveSlot`.
+  - **Time editing**: two paths — `openLogTimeEdit` (completed: edits `actual_log` start/end via `onUpdateLog`) and `openSlotTimeEdit` (all states: edits `start_at`/`end_at` via `onUpdateSlotTime`). `EditTimeState.mode` (`'slot' | 'log'`) controls which mutation fires in `handleSaveTime`.
+  - **Portal event bubbling bug**: Radix/portal popups rendered to `document.body` still bubble click events through the React component tree. The popup container (`data-popup`) and edit panel (`data-edit-time`) both have `onClick={(e) => e.stopPropagation()}` to prevent triggering the column's `onActualCellClick`.
   - **Popup** uses `createPortal` to `document.body` with `position: fixed` — necessary to escape the scroll container's `overflow-y: auto` clipping. Position calculated from `e.currentTarget.getBoundingClientRect()`.
 
 ### Drag System (PlanColumn & ActualColumn)
@@ -164,11 +166,26 @@ Key rules:
 - Drag preview shown while dragging (dashed border overlay, z-index 5)
 - **`today/page.tsx` routes `onMoveSlot`**: PLAN drag → `updateSlotTime`; ACTUAL completed drag → `updateActualLog`; ACTUAL not-started drag → `updateActualDispTime`
 
+**Snap logic (`snapMin` in both columns):**
+```typescript
+// 1분 단위 자유 이동 + 30분 경계 ±5분 이내 마그네틱 스냅
+const raw = Math.round(relY / (slotHeight / SLOT_MINUTES));   // 1-min precision
+const nearest30 = Math.round(raw / SLOT_MINUTES) * SLOT_MINUTES;
+return Math.abs(raw - nearest30) <= 5 ? nearest30 : raw;
+```
+- `slotHeight / SLOT_MINUTES` = pixels per minute (e.g. 36px/30 = 1.2px/min at default size)
+- `previewIdx` stores **minutes offset** from `startHour * 60`, not slot index. Preview top = `previewIdx * (slotHeight / SLOT_MINUTES)`
+- `getTimeFromClick` in TimeGrid uses the same pixel-per-minute calculation for 1-min precision on cell clicks
+
 ### Modal Architecture
 
-- **`AddSlotModal.tsx`** — Radix UI Dialog (portal-based, always centered regardless of scroll). Used for both PLAN and ACTUAL entry creation. Accepts `initialHour?` and `initialMin?` to pre-fill from cell clicks. Timestamp creation: `new Date(`${date}T${HH}:${mm}:00`).toISOString()` (local time → UTC).
+- **`AddSlotModal.tsx`** — Radix UI Dialog for creating PLAN and ACTUAL entries. Accepts `initialHour?`/`initialMin?` to pre-fill from cell clicks. Has two input modes toggled by a "직접 입력" pill button:
+  - **기본 mode**: hour/minute selects (0 or 30 min) + duration presets (PLAN) or end-time selects (ACTUAL)
+  - **직접 입력 mode**: `<input type="time">` for start + end, supports 1-minute precision
+  - Switching modes syncs current values; switching back to 기본 rounds minutes to nearest 30.
+  - Timestamp creation: `new Date(\`${date}T${HH}:${mm}:00\`).toISOString()` (local time → UTC).
 
-- **`SlotEditModal.tsx`** — Radix UI Dialog for editing/deleting existing slots. Triggered by `editingSlotId` in timetableStore.
+- **`SlotEditModal.tsx`** — Radix UI Dialog for editing existing slots. Triggered by `editingSlotId` in timetableStore. Editable fields: title, status, **time range** (`start_at`/`end_at` via `<input type="time">`). Calls `updateSlotTime` on save if times changed.
 
 - **`TemplateDrawer.tsx`** — Radix UI Dialog (bottom sheet on mobile, side panel on desktop). Save current plan slots as a named template, apply/delete saved templates. Uses `useTemplates` hook; `applyTemplate` writes slots to the selected date using `offsetMinutes` + `durationMinutes` from `slots_json`.
 
@@ -263,7 +280,7 @@ The `Translations` interface must stay in sync with all three locale objects —
 
 ### UI Conventions
 
-- All user-visible text must go through the i18n system (`useI18n()`) — no hardcoded Korean/English strings in components
+- All user-visible text must go through the i18n system (`useI18n()`) — no hardcoded Korean/English strings in components. **Exception**: `ActualColumn.tsx` uses hardcoded Korean throughout (legacy); new strings added to it may follow the existing pattern rather than forcing a full refactor.
 - Dark mode: `dark:` Tailwind prefix, toggled via `.dark` class on `<html>`, persisted to `localStorage`
 - Slot status colors: planned=blue, done=green, partial=orange, skipped=gray
 - Layout: sidebar (desktop, `w-52`) + bottom nav (mobile). Sidebar contains monthly `DatePicker` calendar then nav links.

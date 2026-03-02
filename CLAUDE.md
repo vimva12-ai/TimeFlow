@@ -137,35 +137,46 @@ The grid is built from three components working together:
   - **Time editing**: two paths — `openLogTimeEdit` (completed: edits `actual_log` start/end via `onUpdateLog`) and `openSlotTimeEdit` (all states: edits `start_at`/`end_at` via `onUpdateSlotTime`). `EditTimeState.mode` (`'slot' | 'log'`) controls which mutation fires in `handleSaveTime`.
   - **Portal event bubbling bug**: Radix/portal popups rendered to `document.body` still bubble click events through the React component tree. The popup container (`data-popup`) and edit panel (`data-edit-time`) both have `onClick={(e) => e.stopPropagation()}` to prevent triggering the column's `onActualCellClick`.
   - **Popup** uses `createPortal` to `document.body` with `position: fixed` — necessary to escape the scroll container's `overflow-y: auto` clipping. Position calculated from `e.currentTarget.getBoundingClientRect()`.
+  - **Mobile popup close handler**: registered with a **400ms `setTimeout` delay** after popup opens. Mobile browsers fire a synthesized `mousedown` ~300ms after `touchend`; without the delay, it immediately closes a just-opened popup. Cleanup must `clearTimeout` the pending registration on unmount.
+  - **In-progress ACTUAL slots** show an animated fill effect: left-to-right background fill + 3px bottom bar. Colors: blue (running), yellow (paused), red + `animate-pulse` (overtime). Content divs are `relative z-[1]` to appear above the overlay (`z-index: 0`). Updated every 30s via `setInterval` forcing re-render.
 
-### Drag System (PlanColumn & ActualColumn)
+### Drag & Resize System (PlanColumn & ActualColumn)
 
-Both columns use the **Pointer Events API** with a long-press drag pattern:
+Both columns support **drag-to-move** (long-press) and **resize handles** (top/bottom 8px strips).
 
+**Drag — long-press pattern:**
 ```typescript
 const LONG_PRESS_MS = 300;
-const CANCEL_MOVE_PX = 8;  // (10 in ActualColumn)
+const CANCEL_MOVE_PX = 8;  // cancels timer if finger moves before 300ms
 
 function handlePointerDown(e, slot, top) {
-  // Start a 300ms timer
   timerRef.current = setTimeout(() => {
     longPressedRef.current = true;
-    dragDataRef.current = { slotId, durationMin, offsetY, columnRect, ... };
-    el.setPointerCapture(pointerId);  // routes all future pointer events to this element
+    dragDataRef.current = { slotId, durationMin, offsetY, columnRect, originalOffsetMin, ... };
+    el.setPointerCapture(pointerId);
     setDraggingSlotId(slot.id);
   }, LONG_PRESS_MS);
 }
-// pointerMove before 300ms cancels timer if moved > CANCEL_MOVE_PX (allows normal scroll)
-// pointerUp after 300ms → commits drag via onMoveSlot; before → treated as tap/click
+// pointerMove before 300ms → cancels timer if moved > CANCEL_MOVE_PX (allows scroll)
+// pointerUp after 300ms → commits drag only if slot moved ≥ 5 minutes (ActualColumn)
+//                       → otherwise treated as tap/click (opens popup or edit)
 ```
 
 Key rules:
-- **No `e.preventDefault()`** in `handlePointerDown` — keeps subsequent `click` events on child buttons (Play button, etc.) working for short-press taps.
-- **`e.preventDefault()` IS called in `handlePointerUp` (drag branch only)** — prevents the click event that would fire after `pointerup` from triggering inner buttons (e.g., the Play button in not-started ActualColumn slots calling `onStart` and overriding the dragged position with current time).
-- `setPointerCapture` inside `setTimeout` ensures capture happens only after long-press threshold
-- `touch-action: none` CSS on draggable elements prevents browser scroll interference
-- Drag preview shown while dragging (dashed border overlay, z-index 5)
-- **`today/page.tsx` routes `onMoveSlot`**: PLAN drag → `updateSlotTime`; ACTUAL completed drag → `updateActualLog`; ACTUAL not-started drag → `updateActualDispTime`
+- **No `e.preventDefault()`** in `handlePointerDown` — keeps child button clicks working.
+- **`e.preventDefault()` IS called in `handlePointerUp` (drag branch only)** — prevents synthesized click from triggering inner buttons after drag.
+- `setPointerCapture` inside `setTimeout` — capture only activates after long-press threshold.
+- `touch-action: none` on draggable/resizable elements prevents browser scroll interference.
+- **ActualColumn drag commit** uses minutes moved (`movedMin >= 5`), not pixels — prevents mobile touch jitter (~10px natural drift) from accidentally committing drags.
+- **`today/page.tsx` routes `onMoveSlot`**: PLAN drag → `updateSlotTime`; ACTUAL completed drag → `updateActualLog`; ACTUAL not-started drag → `updateActualDispTime`.
+
+**Resize handles:**
+- 8px strips (`HANDLE_PX = 8`) at the top and bottom of each slot block.
+- `onPointerDown` on a handle calls `e.stopPropagation()` to prevent the parent slot's drag timer from firing.
+- Resize uses immediate `setPointerCapture` (no long-press delay). `fixedOffsetMin` = the edge that stays put; the dragged edge snaps to 1-min precision with ±5-min magnetic snap to 30-min boundaries.
+- Minimum slot duration: `MIN_DURATION_MIN = 5`.
+- In-progress ACTUAL slots: resize handles hidden (`canDrag = false`).
+- z-index stack: content=1, resize handles=3, drag/resize preview=5.
 
 **Snap logic (`snapMin` in both columns):**
 ```typescript
@@ -175,7 +186,7 @@ const nearest30 = Math.round(raw / SLOT_MINUTES) * SLOT_MINUTES;
 return Math.abs(raw - nearest30) <= 5 ? nearest30 : raw;
 ```
 - `slotHeight / SLOT_MINUTES` = pixels per minute (e.g. 36px/30 = 1.2px/min at default size)
-- `previewIdx` stores **minutes offset** from `startHour * 60`, not slot index. Preview top = `previewIdx * (slotHeight / SLOT_MINUTES)`
+- `previewIdx` stores **minutes offset** from `startHour * 60`, not slot index. Preview top = `previewIdx * ppm`
 - `getTimeFromClick` in TimeGrid uses the same pixel-per-minute calculation for 1-min precision on cell clicks
 
 ### Modal Architecture
@@ -278,6 +289,18 @@ const { t, locale, setLocale } = useI18n();
 3. Use `t.yourKey` in the component
 
 The `Translations` interface must stay in sync with all three locale objects — TypeScript will catch mismatches.
+
+### Timezone Critical Rule
+
+**Never use `.slice(0, 10)` to extract a date from an ISO UTC string.** UTC ISO strings like `"2026-03-01T22:00:00.000Z"` represent `2026-03-02 07:00 KST`. Slicing gives `"2026-03-01"` (yesterday), which when used to construct `new Date(\`${dateStr}T07:00:00\`)` produces a timestamp one day too early. Each drag/edit compounds the error.
+
+**Always use:**
+```typescript
+import { format, parseISO } from 'date-fns';
+const dateStr = format(parseISO(isoString), 'yyyy-MM-dd'); // local date ✓
+```
+
+This applies everywhere a date string is derived from an ISO timestamp for use in `new Date(\`${date}T...\`)` — drag `dateStr`, resize `date`, time-edit modal `date`.
 
 ### UI Conventions
 

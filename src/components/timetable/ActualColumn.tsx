@@ -43,6 +43,8 @@ function getDisplayTimes(slot: TimeSlotWithLogs): { displayStart: string; displa
 const ACTION_THRESHOLD = 60;
 const LONG_PRESS_MS = 300;
 const CANCEL_MOVE_PX = 10;
+const HANDLE_PX = 8;
+const MIN_DURATION_MIN = 5;
 
 type PopupState = { slotId: string; type: 'progress' | 'edit'; x: number; y: number } | null;
 type EditTimeState = { slotId: string; logId?: string; startVal: string; endVal: string; date: string; mode: 'slot' | 'log' } | null;
@@ -56,10 +58,23 @@ interface DragData {
   dateStr: string;
 }
 
+interface ResizeData {
+  slotId: string;
+  edge: 'top' | 'bottom';
+  fixedOffsetMin: number; // minutes from startHour*60
+  date: string;
+}
+
+interface ResizePreview {
+  top: number;
+  height: number;
+}
+
 export default function ActualColumn({ slots, onStart, onComplete, onChangeStatus, onUpdateLog, onMoveSlot, onUpdateSlotTime }: ActualColumnProps) {
   const { startHour, endHour, slotHeight } = useTimetableStore();
   const totalSlots = ((endHour - startHour) * 60) / SLOT_MINUTES;
   const columnRef = useRef<HTMLDivElement>(null);
+  const ppm = slotHeight / SLOT_MINUTES; // pixels per minute
 
   const [popup, setPopup] = useState<PopupState>(null);
   const [editTime, setEditTime] = useState<EditTimeState>(null);
@@ -67,6 +82,11 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
   const [draggingSlotId, setDraggingSlotId] = useState<string | null>(null);
   const [previewIdx, setPreviewIdx] = useState(0);
   const [, forceUpdate] = useState(0);
+
+  // Resize state
+  const [resizingSlotId, setResizingSlotId] = useState<string | null>(null);
+  const [resizePreview, setResizePreview] = useState<ResizePreview | null>(null);
+  const resizeDataRef = useRef<ResizeData | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -79,28 +99,32 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
     return () => clearInterval(id);
   }, []);
 
-  // 팝업/편집 바깥 클릭 닫기
+  // 팝업/편집 바깥 클릭·터치 닫기 (mousedown + touchstart 모두 처리)
   useEffect(() => {
     if (!popup && !editTime) return;
-    const handler = (e: MouseEvent) => {
+    const handler = (e: Event) => {
       const t = e.target as Element;
       if (!t.closest('[data-popup]') && !t.closest('[data-edit-time]')) {
         setPopup(null); setEditTime(null);
       }
     };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('touchstart', handler);
+    };
   }, [popup, editTime]);
 
   function clearTimer() {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
   }
 
+  // ---- Drag helpers ----
   function snapMin(clientY: number, d: DragData): number {
     const relY = clientY - d.columnRect.top - d.offsetY;
     const totalMins = totalSlots * SLOT_MINUTES;
-    const raw = Math.max(0, Math.min(totalMins - 1, Math.round(relY / (slotHeight / SLOT_MINUTES))));
-    // 30분 경계에서 ±5분 이내면 스냅
+    const raw = Math.max(0, Math.min(totalMins - 1, Math.round(relY / ppm)));
     const nearest30 = Math.round(raw / SLOT_MINUTES) * SLOT_MINUTES;
     return Math.abs(raw - nearest30) <= 5
       ? Math.max(0, Math.min(totalMins - 1, nearest30))
@@ -115,6 +139,41 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
     return { newStart: newStart.toISOString(), newEnd: addMinutes(newStart, durationMin).toISOString() };
   }
 
+  // ---- Resize helpers ----
+  function snapMinForResize(clientY: number): number {
+    const rect = columnRef.current?.getBoundingClientRect();
+    if (!rect) return 0;
+    const relY = clientY - rect.top;
+    const totalMins = totalSlots * SLOT_MINUTES;
+    const raw = Math.max(0, Math.min(totalMins, Math.round(relY / ppm)));
+    const nearest30 = Math.round(raw / SLOT_MINUTES) * SLOT_MINUTES;
+    return Math.abs(raw - nearest30) <= 5
+      ? Math.max(0, Math.min(totalMins, nearest30))
+      : raw;
+  }
+
+  function calcResizePreview(movingOffsetMin: number, fixedOffsetMin: number, edge: 'top' | 'bottom'): ResizePreview {
+    if (edge === 'top') {
+      const startMin = Math.min(movingOffsetMin, fixedOffsetMin - MIN_DURATION_MIN);
+      return { top: startMin * ppm + 1, height: Math.max(2, (fixedOffsetMin - startMin) * ppm - 2) };
+    } else {
+      const endMin = Math.max(movingOffsetMin, fixedOffsetMin + MIN_DURATION_MIN);
+      return { top: fixedOffsetMin * ppm + 1, height: Math.max(2, (endMin - fixedOffsetMin) * ppm - 2) };
+    }
+  }
+
+  function buildResizeTimes(movingOffsetMin: number, fixedOffsetMin: number, edge: 'top' | 'bottom', dateStr: string) {
+    const startOffsetMin = edge === 'top' ? Math.min(movingOffsetMin, fixedOffsetMin - MIN_DURATION_MIN) : fixedOffsetMin;
+    const endOffsetMin = edge === 'top' ? fixedOffsetMin : Math.max(movingOffsetMin, fixedOffsetMin + MIN_DURATION_MIN);
+    const absStart = startHour * 60 + startOffsetMin;
+    const absEnd = startHour * 60 + endOffsetMin;
+    const fmt = (mins: number) =>
+      `${String(Math.floor(mins / 60) % 24).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+    const newStart = new Date(`${dateStr}T${fmt(absStart)}:00`);
+    const newEnd = new Date(`${dateStr}T${fmt(absEnd)}:00`);
+    return { newStart: newStart.toISOString(), newEnd: newEnd.toISOString() };
+  }
+
   function openPopup(el: HTMLElement, slotId: string, type: 'progress' | 'edit') {
     const rect = el.getBoundingClientRect();
     const popupWidth = 150;
@@ -124,7 +183,9 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
     setPopup({ slotId, type, x, y });
   }
 
+  // ---- Drag handlers ----
   function handlePointerDown(e: React.PointerEvent, slot: TimeSlotWithLogs, top: number) {
+    if (resizeDataRef.current) return; // don't start drag during resize
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     startPosRef.current = { x: e.clientX, y: e.clientY };
     longPressedRef.current = false;
@@ -148,7 +209,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
       longPressedRef.current = true;
       dragDataRef.current = { slotId: slot.id, durationMin, offsetY: initY - rect.top - top, columnRect: rect, dateStr };
       try { el.setPointerCapture(pointerId); } catch {}
-      setPreviewIdx(Math.round(top / (slotHeight / SLOT_MINUTES)));
+      setPreviewIdx(Math.round(top / ppm));
       setDraggingSlotId(slot.id);
     }, LONG_PRESS_MS);
   }
@@ -197,6 +258,51 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
     longPressedRef.current = false;
     setDraggingSlotId(null);
     startPosRef.current = null;
+  }
+
+  // ---- Resize handlers ----
+  function handleResizePointerDown(e: React.PointerEvent, slot: TimeSlotWithLogs, edge: 'top' | 'bottom') {
+    e.stopPropagation();
+    e.preventDefault();
+    const rect = columnRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const { displayStart, displayEnd } = getDisplayTimes(slot);
+    const top = slotIndex(displayStart, startHour) * slotHeight;
+    const height = slotSpan(displayStart, displayEnd) * slotHeight;
+    const startOffsetMin = Math.round(top / ppm);
+    const endOffsetMin = Math.round((top + height) / ppm);
+    const fixedOffsetMin = edge === 'top' ? endOffsetMin : startOffsetMin;
+
+    resizeDataRef.current = { slotId: slot.id, edge, fixedOffsetMin, date: displayStart.slice(0, 10) };
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch {}
+
+    const movingOffsetMin = edge === 'top' ? startOffsetMin : endOffsetMin;
+    setResizingSlotId(slot.id);
+    setResizePreview(calcResizePreview(movingOffsetMin, fixedOffsetMin, edge));
+  }
+
+  function handleResizePointerMove(e: React.PointerEvent) {
+    const d = resizeDataRef.current;
+    if (!d) return;
+    setResizePreview(calcResizePreview(snapMinForResize(e.clientY), d.fixedOffsetMin, d.edge));
+  }
+
+  function handleResizePointerUp(e: React.PointerEvent) {
+    const d = resizeDataRef.current;
+    if (!d) return;
+    e.preventDefault();
+    const { newStart, newEnd } = buildResizeTimes(snapMinForResize(e.clientY), d.fixedOffsetMin, d.edge, d.date);
+    onMoveSlot?.(d.slotId, newStart, newEnd);
+    resizeDataRef.current = null;
+    setResizingSlotId(null);
+    setResizePreview(null);
+  }
+
+  function handleResizePointerCancel() {
+    resizeDataRef.current = null;
+    setResizingSlotId(null);
+    setResizePreview(null);
   }
 
   function handlePause(slotId: string) {
@@ -264,15 +370,17 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
         const height = slotSpan(displayStart, displayEnd) * slotHeight;
         const isPaused = !!pauseMap[slot.id];
         const isDragging = draggingSlotId === slot.id;
+        const isResizing = resizingSlotId === slot.id;
         const log = slot.actual_logs[0] ?? null;
         const hasStarted = !!log?.actual_start;
         const hasEnded = !!log?.actual_end;
         // Not-started slots: drag updates actual_disp_start/end (ACTUAL-only position, PLAN unaffected).
         // Completed slots: drag updates actual_log times.
-        // In-progress slots cannot be dragged.
+        // In-progress slots cannot be dragged or resized.
         const canDrag = !hasStarted || hasEnded;
         const showInline = hasStarted && !hasEnded && height >= ACTION_THRESHOLD;
         const showCompact = hasStarted && !hasEnded && height < ACTION_THRESHOLD;
+        const busy = (draggingSlotId !== null && !isDragging) || (resizingSlotId !== null && !isResizing);
 
         return (
           <div
@@ -281,8 +389,8 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
             data-actual-slot={slot.id}
             className={clsx(
               'absolute left-0.5 right-0.5 rounded-sm border border-gray-300 dark:border-gray-600 overflow-hidden z-[2] select-none',
-              isDragging ? 'opacity-30' : '',
-              draggingSlotId && !isDragging ? 'pointer-events-none' : '',
+              (isDragging || isResizing) ? 'opacity-30' : '',
+              busy ? 'pointer-events-none' : '',
               canDrag ? 'cursor-grab active:cursor-grabbing' : '',
             )}
             style={{ top: top + 1, height: height - 2, touchAction: canDrag ? 'none' : undefined }}
@@ -291,6 +399,22 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
             onPointerUp={canDrag ? (e) => handlePointerUp(e, slot) : undefined}
             onPointerCancel={canDrag ? handlePointerCancel : undefined}
           >
+            {/* 상단 리사이즈 핸들 (not-started / completed 전용) */}
+            {canDrag && (
+              <div
+                data-slot="true"
+                data-resize-handle="top"
+                className="absolute top-0 left-0 right-0 z-[3] flex items-start justify-center cursor-ns-resize"
+                style={{ height: HANDLE_PX, touchAction: 'none' }}
+                onPointerDown={(e) => handleResizePointerDown(e, slot, 'top')}
+                onPointerMove={handleResizePointerMove}
+                onPointerUp={handleResizePointerUp}
+                onPointerCancel={handleResizePointerCancel}
+              >
+                <div className="w-5 h-px bg-gray-400 opacity-25 hover:opacity-60 mt-[3px] transition-opacity" />
+              </div>
+            )}
+
             {!hasStarted ? (
               <div className="relative w-full h-full">
                 <button
@@ -303,6 +427,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
                 {height >= 28 && (
                   <button
                     onClick={(e) => openSlotTimeEdit(e, slot)}
+                    onPointerDown={(e) => e.stopPropagation()}
                     className="absolute top-0.5 right-0.5 p-0.5 rounded text-gray-300 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                   >
                     <Clock className="w-3 h-3" />
@@ -372,6 +497,22 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
                 )}
               </div>
             )}
+
+            {/* 하단 리사이즈 핸들 (not-started / completed 전용) */}
+            {canDrag && (
+              <div
+                data-slot="true"
+                data-resize-handle="bottom"
+                className="absolute bottom-0 left-0 right-0 z-[3] flex items-end justify-center cursor-ns-resize"
+                style={{ height: HANDLE_PX, touchAction: 'none' }}
+                onPointerDown={(e) => handleResizePointerDown(e, slot, 'bottom')}
+                onPointerMove={handleResizePointerMove}
+                onPointerUp={handleResizePointerUp}
+                onPointerCancel={handleResizePointerCancel}
+              >
+                <div className="w-5 h-px bg-gray-400 opacity-25 hover:opacity-60 mb-[3px] transition-opacity" />
+              </div>
+            )}
           </div>
         );
       })}
@@ -383,12 +524,20 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
         return (
           <div
             className="absolute left-0.5 right-0.5 rounded-sm border-2 border-dashed border-green-500 bg-green-100/70 dark:bg-green-900/50 z-[5] pointer-events-none"
-            style={{ top: previewIdx * (slotHeight / SLOT_MINUTES) + 1, height: h - 2 }}
+            style={{ top: previewIdx * ppm + 1, height: h - 2 }}
           >
             <div className="text-[10px] font-semibold text-green-700 dark:text-green-300 px-1 pt-0.5 truncate">{dragSlot.title}</div>
           </div>
         );
       })()}
+
+      {/* 리사이즈 미리보기 */}
+      {resizingSlotId && resizePreview && (
+        <div
+          className="absolute left-0.5 right-0.5 rounded-sm border-2 border-dashed border-amber-500 bg-amber-100/70 dark:bg-amber-900/50 z-[5] pointer-events-none"
+          style={{ top: resizePreview.top, height: resizePreview.height }}
+        />
+      )}
 
       {/* 팝업 */}
       {popup && popupSlot && typeof window !== 'undefined' && createPortal(

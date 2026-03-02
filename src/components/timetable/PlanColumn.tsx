@@ -39,31 +39,51 @@ interface DragData {
   columnRect: DOMRect;
 }
 
+interface ResizeData {
+  slotId: string;
+  edge: 'top' | 'bottom';
+  fixedOffsetMin: number; // minutes from startHour*60
+  date: string;
+}
+
+interface ResizePreview {
+  top: number;
+  height: number;
+}
+
 const LONG_PRESS_MS = 300;
 const CANCEL_MOVE_PX = 8;
+const HANDLE_PX = 8;
+const MIN_DURATION_MIN = 5;
 
 export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps) {
   const { setEditingSlotId, startHour, endHour, slotHeight } = useTimetableStore();
   const totalSlots = ((endHour - startHour) * 60) / SLOT_MINUTES;
   const columnRef = useRef<HTMLDivElement>(null);
+  const ppm = slotHeight / SLOT_MINUTES; // pixels per minute
 
+  // Drag state
   const [draggingSlotId, setDraggingSlotId] = useState<string | null>(null);
   const [previewIdx, setPreviewIdx] = useState(0);
-
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
   const longPressedRef = useRef(false);
   const dragDataRef = useRef<DragData | null>(null);
 
+  // Resize state
+  const [resizingSlotId, setResizingSlotId] = useState<string | null>(null);
+  const [resizePreview, setResizePreview] = useState<ResizePreview | null>(null);
+  const resizeDataRef = useRef<ResizeData | null>(null);
+
   function clearTimer() {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
   }
 
+  // ---- Drag helpers ----
   function snapMin(clientY: number, d: DragData): number {
     const relY = clientY - d.columnRect.top - d.offsetY;
     const totalMins = totalSlots * SLOT_MINUTES;
-    const raw = Math.max(0, Math.min(totalMins - 1, Math.round(relY / (slotHeight / SLOT_MINUTES))));
-    // 30분 경계에서 ±5분 이내면 스냅
+    const raw = Math.max(0, Math.min(totalMins - 1, Math.round(relY / ppm)));
     const nearest30 = Math.round(raw / SLOT_MINUTES) * SLOT_MINUTES;
     return Math.abs(raw - nearest30) <= 5
       ? Math.max(0, Math.min(totalMins - 1, nearest30))
@@ -78,7 +98,44 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
     return { newStart: newStart.toISOString(), newEnd: addMinutes(newStart, durationMin).toISOString() };
   }
 
+  // ---- Resize helpers ----
+  function snapMinForResize(clientY: number): number {
+    const rect = columnRef.current?.getBoundingClientRect();
+    if (!rect) return 0;
+    const relY = clientY - rect.top;
+    const totalMins = totalSlots * SLOT_MINUTES;
+    const raw = Math.max(0, Math.min(totalMins, Math.round(relY / ppm)));
+    const nearest30 = Math.round(raw / SLOT_MINUTES) * SLOT_MINUTES;
+    return Math.abs(raw - nearest30) <= 5
+      ? Math.max(0, Math.min(totalMins, nearest30))
+      : raw;
+  }
+
+  function calcResizePreview(movingOffsetMin: number, fixedOffsetMin: number, edge: 'top' | 'bottom'): ResizePreview {
+    if (edge === 'top') {
+      const startMin = Math.min(movingOffsetMin, fixedOffsetMin - MIN_DURATION_MIN);
+      return { top: startMin * ppm + 1, height: Math.max(2, (fixedOffsetMin - startMin) * ppm - 2) };
+    } else {
+      const endMin = Math.max(movingOffsetMin, fixedOffsetMin + MIN_DURATION_MIN);
+      return { top: fixedOffsetMin * ppm + 1, height: Math.max(2, (endMin - fixedOffsetMin) * ppm - 2) };
+    }
+  }
+
+  function buildResizeTimes(movingOffsetMin: number, fixedOffsetMin: number, edge: 'top' | 'bottom', dateStr: string) {
+    const startOffsetMin = edge === 'top' ? Math.min(movingOffsetMin, fixedOffsetMin - MIN_DURATION_MIN) : fixedOffsetMin;
+    const endOffsetMin = edge === 'top' ? fixedOffsetMin : Math.max(movingOffsetMin, fixedOffsetMin + MIN_DURATION_MIN);
+    const absStart = startHour * 60 + startOffsetMin;
+    const absEnd = startHour * 60 + endOffsetMin;
+    const fmt = (mins: number) =>
+      `${String(Math.floor(mins / 60) % 24).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+    const newStart = new Date(`${dateStr}T${fmt(absStart)}:00`);
+    const newEnd = new Date(`${dateStr}T${fmt(absEnd)}:00`);
+    return { newStart: newStart.toISOString(), newEnd: newEnd.toISOString() };
+  }
+
+  // ---- Drag handlers ----
   function handlePointerDown(e: React.PointerEvent, slot: TimeSlotWithLogs, top: number) {
+    if (resizeDataRef.current) return; // don't start drag during resize
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     startPosRef.current = { x: e.clientX, y: e.clientY };
     longPressedRef.current = false;
@@ -95,7 +152,7 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
       longPressedRef.current = true;
       dragDataRef.current = { slotId: slot.id, durationMin, offsetY: initY - rect.top - top, columnRect: rect };
       try { el.setPointerCapture(pointerId); } catch {}
-      setPreviewIdx(Math.round(top / (slotHeight / SLOT_MINUTES)));
+      setPreviewIdx(Math.round(top / ppm));
       setDraggingSlotId(slot.id);
     }, LONG_PRESS_MS);
   }
@@ -116,7 +173,6 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
   function handlePointerUp(e: React.PointerEvent, slot: TimeSlotWithLogs) {
     clearTimer();
     if (longPressedRef.current) {
-      // 드래그 완료 후 click 이벤트 차단 (스냅된 위치 유지)
       e.preventDefault();
       const d = dragDataRef.current;
       if (d && onMoveSlot) {
@@ -140,6 +196,50 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
     startPosRef.current = null;
   }
 
+  // ---- Resize handlers ----
+  function handleResizePointerDown(e: React.PointerEvent, slot: TimeSlotWithLogs, edge: 'top' | 'bottom') {
+    e.stopPropagation();
+    e.preventDefault();
+    const rect = columnRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const top = slotIndex(slot.start_at, startHour) * slotHeight;
+    const height = slotSpan(slot.start_at, slot.end_at) * slotHeight;
+    const startOffsetMin = Math.round(top / ppm);
+    const endOffsetMin = Math.round((top + height) / ppm);
+    const fixedOffsetMin = edge === 'top' ? endOffsetMin : startOffsetMin;
+
+    resizeDataRef.current = { slotId: slot.id, edge, fixedOffsetMin, date: slot.start_at.slice(0, 10) };
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch {}
+
+    const movingOffsetMin = edge === 'top' ? startOffsetMin : endOffsetMin;
+    setResizingSlotId(slot.id);
+    setResizePreview(calcResizePreview(movingOffsetMin, fixedOffsetMin, edge));
+  }
+
+  function handleResizePointerMove(e: React.PointerEvent) {
+    const d = resizeDataRef.current;
+    if (!d) return;
+    setResizePreview(calcResizePreview(snapMinForResize(e.clientY), d.fixedOffsetMin, d.edge));
+  }
+
+  function handleResizePointerUp(e: React.PointerEvent) {
+    const d = resizeDataRef.current;
+    if (!d) return;
+    e.preventDefault();
+    const { newStart, newEnd } = buildResizeTimes(snapMinForResize(e.clientY), d.fixedOffsetMin, d.edge, d.date);
+    onMoveSlot?.(d.slotId, newStart, newEnd);
+    resizeDataRef.current = null;
+    setResizingSlotId(null);
+    setResizePreview(null);
+  }
+
+  function handleResizePointerCancel() {
+    resizeDataRef.current = null;
+    setResizingSlotId(null);
+    setResizePreview(null);
+  }
+
   const dragSlot = draggingSlotId ? slots.find((s) => s.id === draggingSlotId) : null;
 
   return (
@@ -148,6 +248,8 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
         const top = slotIndex(slot.start_at, startHour) * slotHeight;
         const height = slotSpan(slot.start_at, slot.end_at) * slotHeight;
         const isDragging = draggingSlotId === slot.id;
+        const isResizing = resizingSlotId === slot.id;
+        const busy = (draggingSlotId !== null && !isDragging) || (resizingSlotId !== null && !isResizing);
 
         return (
           <div
@@ -157,8 +259,8 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
             className={clsx(
               'absolute left-0.5 right-0.5 rounded-sm border-l-4 px-1.5 text-left text-[11px] overflow-hidden z-[2] select-none',
               statusColor(slot.status),
-              isDragging ? 'opacity-30' : 'hover:opacity-80',
-              draggingSlotId && !isDragging ? 'pointer-events-none' : 'cursor-grab active:cursor-grabbing',
+              (isDragging || isResizing) ? 'opacity-30' : 'hover:opacity-80',
+              busy ? 'pointer-events-none' : 'cursor-grab active:cursor-grabbing',
             )}
             style={{ top: top + 1, height: height - 2, touchAction: 'none' }}
             onPointerDown={(e) => handlePointerDown(e, slot, top)}
@@ -166,7 +268,21 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
             onPointerUp={(e) => handlePointerUp(e, slot)}
             onPointerCancel={handlePointerCancel}
           >
-            <div className="font-semibold truncate leading-tight pointer-events-none">{slot.title}</div>
+            {/* 상단 리사이즈 핸들 */}
+            <div
+              data-slot="true"
+              data-resize-handle="top"
+              className="absolute top-0 left-0 right-0 z-[3] flex items-start justify-center cursor-ns-resize"
+              style={{ height: HANDLE_PX, touchAction: 'none' }}
+              onPointerDown={(e) => handleResizePointerDown(e, slot, 'top')}
+              onPointerMove={handleResizePointerMove}
+              onPointerUp={handleResizePointerUp}
+              onPointerCancel={handleResizePointerCancel}
+            >
+              <div className="w-5 h-px bg-current opacity-25 hover:opacity-60 mt-[3px] transition-opacity" />
+            </div>
+
+            <div className="font-semibold truncate leading-tight pointer-events-none" style={{ paddingTop: 3 }}>{slot.title}</div>
             {height >= 36 && (
               <div className="opacity-70 text-[10px] leading-tight pointer-events-none">
                 {format(parseISO(slot.start_at), 'HH:mm')}–{format(parseISO(slot.end_at), 'HH:mm')}
@@ -175,6 +291,20 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
             {height >= 52 && (
               <div className="text-[9px] opacity-60 leading-tight pointer-events-none">{statusLabel(slot.status)}</div>
             )}
+
+            {/* 하단 리사이즈 핸들 */}
+            <div
+              data-slot="true"
+              data-resize-handle="bottom"
+              className="absolute bottom-0 left-0 right-0 z-[3] flex items-end justify-center cursor-ns-resize"
+              style={{ height: HANDLE_PX, touchAction: 'none' }}
+              onPointerDown={(e) => handleResizePointerDown(e, slot, 'bottom')}
+              onPointerMove={handleResizePointerMove}
+              onPointerUp={handleResizePointerUp}
+              onPointerCancel={handleResizePointerCancel}
+            >
+              <div className="w-5 h-px bg-current opacity-25 hover:opacity-60 mb-[3px] transition-opacity" />
+            </div>
           </div>
         );
       })}
@@ -185,7 +315,7 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
         return (
           <div
             className="absolute left-0.5 right-0.5 rounded-sm border-2 border-dashed border-blue-500 bg-blue-100/70 dark:bg-blue-900/50 z-[5] pointer-events-none"
-            style={{ top: previewIdx * (slotHeight / SLOT_MINUTES) + 1, height: h - 2 }}
+            style={{ top: previewIdx * ppm + 1, height: h - 2 }}
           >
             <div className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 px-1 pt-0.5 truncate">
               {dragSlot.title}
@@ -193,6 +323,14 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
           </div>
         );
       })()}
+
+      {/* 리사이즈 미리보기 */}
+      {resizingSlotId && resizePreview && (
+        <div
+          className="absolute left-0.5 right-0.5 rounded-sm border-2 border-dashed border-violet-500 bg-violet-100/70 dark:bg-violet-900/50 z-[5] pointer-events-none"
+          style={{ top: resizePreview.top, height: resizePreview.height }}
+        />
+      )}
     </div>
   );
 }

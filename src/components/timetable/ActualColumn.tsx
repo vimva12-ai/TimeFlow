@@ -56,6 +56,7 @@ interface DragData {
   offsetY: number;
   columnRect: DOMRect;
   dateStr: string;
+  originalOffsetMin: number;
 }
 
 interface ResizeData {
@@ -99,20 +100,28 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
     return () => clearInterval(id);
   }, []);
 
-  // 팝업/편집 바깥 클릭·터치 닫기 (mousedown + touchstart 모두 처리)
+  // 팝업/편집 바깥 클릭·터치 닫기
+  // 400ms 딜레이: 모바일 touchend 후 ~300ms에 발생하는 합성 mousedown이
+  // 팝업을 즉시 닫아버리는 문제를 방지
   useEffect(() => {
     if (!popup && !editTime) return;
-    const handler = (e: Event) => {
-      const t = e.target as Element;
-      if (!t.closest('[data-popup]') && !t.closest('[data-edit-time]')) {
-        setPopup(null); setEditTime(null);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    document.addEventListener('touchstart', handler, { passive: true });
+    let handler: ((e: Event) => void) | null = null;
+    const timeoutId = setTimeout(() => {
+      handler = (e: Event) => {
+        const t = e.target as Element;
+        if (!t.closest('[data-popup]') && !t.closest('[data-edit-time]')) {
+          setPopup(null); setEditTime(null);
+        }
+      };
+      document.addEventListener('mousedown', handler);
+      document.addEventListener('touchstart', handler, { passive: true });
+    }, 400);
     return () => {
-      document.removeEventListener('mousedown', handler);
-      document.removeEventListener('touchstart', handler);
+      clearTimeout(timeoutId);
+      if (handler) {
+        document.removeEventListener('mousedown', handler);
+        document.removeEventListener('touchstart', handler);
+      }
     };
   }, [popup, editTime]);
 
@@ -207,7 +216,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
         ? Math.max(1, differenceInMinutes(parseISO(log.actual_end), parseISO(log.actual_start)))
         : Math.max(1, differenceInMinutes(parseISO(de2), parseISO(ds2)));
       longPressedRef.current = true;
-      dragDataRef.current = { slotId: slot.id, durationMin, offsetY: initY - rect.top - top, columnRect: rect, dateStr };
+      dragDataRef.current = { slotId: slot.id, durationMin, offsetY: initY - rect.top - top, columnRect: rect, dateStr, originalOffsetMin: Math.round(top / ppm) };
       try { el.setPointerCapture(pointerId); } catch {}
       setPreviewIdx(Math.round(top / ppm));
       setDraggingSlotId(slot.id);
@@ -233,12 +242,13 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
       // 드래그 완료 후 내부 버튼(Play 등)의 click 이벤트 차단
       e.preventDefault();
       const d = dragDataRef.current;
-      // 손가락이 실제로 충분히 이동했을 때만 드래그 커밋
-      // 모바일에서 탭 시 롱프레스 타이머가 발동되더라도 이동 없으면 팝업 열기
-      const totalDy = startPosRef.current ? Math.abs(e.clientY - startPosRef.current.y) : CANCEL_MOVE_PX;
-      const didDrag = totalDy >= CANCEL_MOVE_PX;
+      // 픽셀이 아닌 분(minute) 기준으로 이동 여부 판단
+      // 모바일 터치 지터(5~15px 자연 흔들림)로 인한 오작동 방지
+      const snapResult = d ? snapMin(e.clientY, d) : 0;
+      const movedMin = d ? Math.abs(snapResult - d.originalOffsetMin) : 0;
+      const didDrag = movedMin >= 5; // 5분 이상 이동 시에만 드래그 커밋
       if (d && onMoveSlot && didDrag) {
-        const { newStart, newEnd } = buildNewTimes(snapMin(e.clientY, d), d.durationMin, d.dateStr);
+        const { newStart, newEnd } = buildNewTimes(snapResult, d.durationMin, d.dateStr);
         onMoveSlot(d.slotId, newStart, newEnd);
       } else if (!didDrag) {
         // 이동 없는 롱프레스 → 탭으로 간주하여 팝업 열기

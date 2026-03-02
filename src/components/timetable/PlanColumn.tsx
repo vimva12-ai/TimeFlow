@@ -175,9 +175,15 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
     if (longPressedRef.current) {
       e.preventDefault();
       const d = dragDataRef.current;
-      if (d && onMoveSlot) {
+      // 손가락이 실제로 충분히 이동했을 때만 드래그 커밋
+      const totalDy = startPosRef.current ? Math.abs(e.clientY - startPosRef.current.y) : CANCEL_MOVE_PX;
+      const didDrag = totalDy >= CANCEL_MOVE_PX;
+      if (d && onMoveSlot && didDrag) {
         const { newStart, newEnd } = buildNewTimes(snapMin(e.clientY, d), d.durationMin);
         onMoveSlot(d.slotId, newStart, newEnd);
+      } else if (!didDrag) {
+        // 이동 없는 롱프레스 → 탭으로 간주하여 편집창 열기
+        setEditingSlotId(slot.id);
       }
       dragDataRef.current = null;
       longPressedRef.current = false;

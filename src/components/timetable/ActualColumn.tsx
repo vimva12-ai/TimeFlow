@@ -233,9 +233,19 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
       // 드래그 완료 후 내부 버튼(Play 등)의 click 이벤트 차단
       e.preventDefault();
       const d = dragDataRef.current;
-      if (d && onMoveSlot) {
+      // 손가락이 실제로 충분히 이동했을 때만 드래그 커밋
+      // 모바일에서 탭 시 롱프레스 타이머가 발동되더라도 이동 없으면 팝업 열기
+      const totalDy = startPosRef.current ? Math.abs(e.clientY - startPosRef.current.y) : CANCEL_MOVE_PX;
+      const didDrag = totalDy >= CANCEL_MOVE_PX;
+      if (d && onMoveSlot && didDrag) {
         const { newStart, newEnd } = buildNewTimes(snapMin(e.clientY, d), d.durationMin, d.dateStr);
         onMoveSlot(d.slotId, newStart, newEnd);
+      } else if (!didDrag) {
+        // 이동 없는 롱프레스 → 탭으로 간주하여 팝업 열기
+        const log = slot.actual_logs[0] ?? null;
+        if (log?.actual_end) {
+          openPopup(e.currentTarget as HTMLElement, slot.id, 'edit');
+        }
       }
       dragDataRef.current = null;
       longPressedRef.current = false;

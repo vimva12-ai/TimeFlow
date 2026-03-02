@@ -215,7 +215,7 @@ export default function PlanColumn({ slots, date, onMoveSlot }: PlanColumnProps)
     const endOffsetMin = Math.round((top + height) / ppm);
     const fixedOffsetMin = edge === 'top' ? endOffsetMin : startOffsetMin;
 
-    resizeDataRef.current = { slotId: slot.id, edge, fixedOffsetMin, date: slot.start_at.slice(0, 10) };
+    resizeDataRef.current = { slotId: slot.id, edge, fixedOffsetMin, date: format(parseISO(slot.start_at), 'yyyy-MM-dd') };
     try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch {}
 
     const movingOffsetMin = edge === 'top' ? startOffsetMin : endOffsetMin;

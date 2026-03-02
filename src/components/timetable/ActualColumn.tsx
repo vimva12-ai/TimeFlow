@@ -204,7 +204,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
     const pointerId = e.pointerId;
     const initY = e.clientY;
     const { displayStart } = getDisplayTimes(slot);
-    const dateStr = displayStart.slice(0, 10);
+    const dateStr = format(parseISO(displayStart), 'yyyy-MM-dd');
 
     timerRef.current = setTimeout(() => {
       const rect = columnRef.current?.getBoundingClientRect();
@@ -294,7 +294,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
     const endOffsetMin = Math.round((top + height) / ppm);
     const fixedOffsetMin = edge === 'top' ? endOffsetMin : startOffsetMin;
 
-    resizeDataRef.current = { slotId: slot.id, edge, fixedOffsetMin, date: displayStart.slice(0, 10) };
+    resizeDataRef.current = { slotId: slot.id, edge, fixedOffsetMin, date: format(parseISO(displayStart), 'yyyy-MM-dd') };
     try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch {}
 
     const movingOffsetMin = edge === 'top' ? startOffsetMin : endOffsetMin;
@@ -347,7 +347,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
       slotId: slot.id, logId: log.id,
       startVal: log.actual_start ? format(parseISO(log.actual_start), 'HH:mm') : '',
       endVal: log.actual_end ? format(parseISO(log.actual_end), 'HH:mm') : '',
-      date: slot.start_at.slice(0, 10),
+      date: format(parseISO(slot.start_at), 'yyyy-MM-dd'),
       mode: 'log',
     });
     setPopup(null);
@@ -359,7 +359,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
       slotId: slot.id,
       startVal: format(parseISO(slot.start_at), 'HH:mm'),
       endVal: format(parseISO(slot.end_at), 'HH:mm'),
-      date: slot.start_at.slice(0, 10),
+      date: format(parseISO(slot.start_at), 'yyyy-MM-dd'),
       mode: 'slot',
     });
     setPopup(null);

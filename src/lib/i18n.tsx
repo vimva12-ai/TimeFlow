@@ -46,6 +46,11 @@ const translations = {
     hoursShown: (h: number) => `${h}시간 표시`,
     midnight: '자정',
     notificationSettings: '알림 설정',
+    slotAlertTitle: '슬롯 시작 알림',
+    slotAlertDesc: '슬롯 시작 5분 전에 알림을 받습니다',
+    notifOn: '알림 켜짐',
+    notifOff: '알림 끄기',
+    iosNotifNote: 'iOS Safari는 Web Push 알림을 지원하지 않습니다. 홈 화면에 추가한 경우 iOS 16.4 이상에서 지원됩니다.',
     // 슬롯 편집
     editSlot: '슬롯 편집',
     title: '제목',
@@ -145,6 +150,11 @@ const translations = {
     hoursShown: (h: number) => `${h}h shown`,
     midnight: 'Midnight',
     notificationSettings: 'Notifications',
+    slotAlertTitle: 'Slot Reminder',
+    slotAlertDesc: 'Get notified 5 min before a slot starts',
+    notifOn: 'Notifications on',
+    notifOff: 'Notifications off',
+    iosNotifNote: 'iOS Safari does not support Web Push. Supported on iOS 16.4+ when added to Home Screen.',
     editSlot: 'Edit Slot',
     title: 'Title',
     status: 'Status',
@@ -237,6 +247,11 @@ const translations = {
     hoursShown: (h: number) => `${h}時間表示`,
     midnight: '深夜0時',
     notificationSettings: '通知設定',
+    slotAlertTitle: 'スロット開始通知',
+    slotAlertDesc: 'スロット開始5分前に通知します',
+    notifOn: '通知オン',
+    notifOff: '通知オフ',
+    iosNotifNote: 'iOS Safariはウェブプッシュ通知に対応していません。ホーム画面に追加するとiOS 16.4以降で対応します。',
     editSlot: 'スロット編集',
     title: 'タイトル',
     status: 'ステータス',
@@ -332,6 +347,11 @@ export interface Translations {
   hoursShown: (h: number) => string;
   midnight: string;
   notificationSettings: string;
+  slotAlertTitle: string;
+  slotAlertDesc: string;
+  notifOn: string;
+  notifOff: string;
+  iosNotifNote: string;
   editSlot: string;
   title: string;
   status: string;

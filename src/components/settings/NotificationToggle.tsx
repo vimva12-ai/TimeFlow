@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Bell, BellOff } from 'lucide-react';
 import { subscribeUser, unsubscribeUser } from '@/lib/webpush';
+import { useI18n } from '@/lib/i18n';
 
 function isIOS(): boolean {
   if (typeof navigator === 'undefined') return false;
@@ -10,6 +11,7 @@ function isIOS(): boolean {
 }
 
 export default function NotificationToggle() {
+  const { t } = useI18n();
   const [permission, setPermission] = useState<NotificationPermission>('default');
   const [subscribed, setSubscribed] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -42,8 +44,7 @@ export default function NotificationToggle() {
   if (isIOS()) {
     return (
       <div className="rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 p-3 text-sm text-yellow-800 dark:text-yellow-300">
-        iOS Safari는 Web Push 알림을 지원하지 않습니다.
-        홈 화면에 추가한 경우 iOS 16.4 이상에서 지원됩니다.
+        {t.iosNotifNote}
       </div>
     );
   }
@@ -51,8 +52,8 @@ export default function NotificationToggle() {
   return (
     <div className="flex items-center justify-between">
       <div>
-        <div className="font-medium text-gray-900 dark:text-gray-100">슬롯 시작 알림</div>
-        <div className="text-sm text-gray-500 dark:text-gray-400">슬롯 시작 5분 전에 알림을 받습니다</div>
+        <div className="font-medium text-gray-900 dark:text-gray-100">{t.slotAlertTitle}</div>
+        <div className="text-sm text-gray-500 dark:text-gray-400">{t.slotAlertDesc}</div>
       </div>
       <button
         onClick={toggle}
@@ -64,7 +65,7 @@ export default function NotificationToggle() {
         } disabled:opacity-50`}
       >
         {subscribed ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
-        {subscribed ? '알림 켜짐' : '알림 끄기'}
+        {subscribed ? t.notifOn : t.notifOff}
       </button>
     </div>
   );

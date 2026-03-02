@@ -425,6 +425,30 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
               </div>
             )}
 
+            {/* 진행 중 프로그레스 이펙트 (in-progress only) */}
+            {hasStarted && !hasEnded && log?.actual_start && (() => {
+              const elapsedMin = differenceInMinutes(new Date(), parseISO(log.actual_start));
+              const plannedMin = Math.max(1, differenceInMinutes(parseISO(slot.end_at), parseISO(slot.start_at)));
+              const pct = Math.min(100, Math.max(0, (elapsedMin / plannedMin) * 100));
+              const isOver = elapsedMin >= plannedMin;
+              const barColor = isOver ? '#ef4444' : isPaused ? '#eab308' : '#3b82f6';
+              const bgColor = isOver ? 'rgba(239,68,68,0.07)' : isPaused ? 'rgba(234,179,8,0.07)' : 'rgba(59,130,246,0.09)';
+              return (
+                <>
+                  {/* 배경 채우기 (좌→우) */}
+                  <div
+                    className="absolute top-0 left-0 bottom-0 pointer-events-none"
+                    style={{ width: `${pct}%`, background: bgColor, transition: 'width 30s linear', zIndex: 0 }}
+                  />
+                  {/* 하단 진행 바 */}
+                  <div
+                    className={clsx('absolute bottom-0 left-0 h-[3px] rounded-b-sm pointer-events-none', isOver && 'animate-pulse')}
+                    style={{ width: `${pct}%`, background: barColor, transition: 'width 30s linear', zIndex: 4 }}
+                  />
+                </>
+              );
+            })()}
+
             {!hasStarted ? (
               <div className="relative w-full h-full">
                 <button
@@ -445,7 +469,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
                 )}
               </div>
             ) : showInline ? (
-              <div className={clsx('flex flex-col h-full p-0.5 gap-0.5', isPaused ? 'bg-yellow-50/80 dark:bg-yellow-900/20' : 'bg-blue-50/80 dark:bg-blue-900/20')}>
+              <div className={clsx('flex flex-col h-full p-0.5 gap-0.5 relative z-[1]', isPaused ? 'bg-yellow-50/80 dark:bg-yellow-900/20' : 'bg-blue-50/80 dark:bg-blue-900/20')}>
                 <div className={clsx('text-[9px] font-semibold leading-tight px-0.5 flex items-center gap-0.5 pointer-events-none', isPaused ? 'text-yellow-600 dark:text-yellow-400' : 'text-blue-600 dark:text-blue-400')}>
                   {isPaused ? <Pause className="w-2 h-2" /> : <Play className="w-2 h-2" />}
                   {format(parseISO(log!.actual_start!), 'HH:mm')}{isPaused ? ' 일시정지' : ' ▶'}
@@ -477,7 +501,7 @@ export default function ActualColumn({ slots, onStart, onComplete, onChangeStatu
             ) : showCompact ? (
               <button
                 onClick={(e) => openPopup(e.currentTarget as HTMLElement, slot.id, 'progress')}
-                className={clsx('w-full h-full flex items-center px-1 gap-0.5 transition-colors', isPaused ? 'bg-yellow-50/80 dark:bg-yellow-900/20 hover:bg-yellow-100/80' : 'bg-blue-50/80 dark:bg-blue-900/20 hover:bg-blue-100/80 dark:hover:bg-blue-800/30')}
+                className={clsx('w-full h-full flex items-center px-1 gap-0.5 transition-colors relative z-[1]', isPaused ? 'bg-yellow-50/80 dark:bg-yellow-900/20 hover:bg-yellow-100/80' : 'bg-blue-50/80 dark:bg-blue-900/20 hover:bg-blue-100/80 dark:hover:bg-blue-800/30')}
               >
                 {isPaused ? <Pause className="w-2.5 h-2.5 shrink-0 text-yellow-500" /> : <Play className="w-2.5 h-2.5 shrink-0 text-blue-500" />}
                 <span className={clsx('text-[9px] font-semibold truncate', isPaused ? 'text-yellow-600 dark:text-yellow-400' : 'text-blue-600 dark:text-blue-400')}>

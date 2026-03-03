@@ -59,6 +59,7 @@ users/{uid}/daily_plans/{planId}/time_slots/{slotId}/actual_logs/{logId}
 ```
 
 - **`daily_plans`** — doc ID = `{uid}_{date}` (deterministic). Created on first access with `getDoc` check first — only `setDoc` if not exists (avoids repeated writes on refetch).
+- **`todos`** — `users/{uid}/todos/{YYYY-MM-DD}`: `{ items: Array<{ id, text, checked }>, date }`. Written by `useTodo` via `setDoc` (full replace). One document per calendar day; old days are preserved for weekly report history.
 - **`time_slots`** — stores `uid` (for Collection Group queries) and `planId` fields.
 - **`actual_logs`** — subcollection of each slot; stores real start/end times.
 - **`templates`** — `users/{uid}/templates/{id}`: `name` string + `slots_json` array of `{ title, offsetMinutes, durationMinutes, sort_order }`.
@@ -205,6 +206,10 @@ return Math.abs(raw - nearest30) <= 5 ? nearest30 : raw;
 
 - **`PomodoroTimer.tsx`** — fixed-position widget (bottom-right). Pure client state via `useReducer`. Phases: focus(25min) → break(5min), every 4th break becomes long-break(15min). Sends browser `Notification` when each phase ends (requires `Notification.permission === 'granted'`).
 
+- **`SidebarPomodoro.tsx`** — compact sidebar pomodoro timer (in `src/components/nav/`). Pure client state via `useReducer`. Phases: focus(25min) → break(5min), every 4th focus becomes long-break(15min). Plays a Web Audio API beep on phase completion (`try/catch` for iOS/unsupported environments). SVG circular progress ring. Session dot indicators (4 dots; filled count = `session % 4`, shows all 4 during long-break). `SKIP` and auto `ADVANCE_PHASE` share the same reducer case via fall-through.
+
+- **`SidebarTodo.tsx`** — sidebar daily todo list (in `src/components/nav/`). Reads/writes via `useTodo(date)` hook. Max 15 items. Progress bar shows `checked/total`. Input field hidden while loading to prevent writes against stale empty state. Schedules a `setTimeout` to `setDate(todayStr())` at local midnight so the list auto-switches to the new day without a page reload.
+
 ### Dark Mode
 
 Tailwind v4 defaults to `prefers-color-scheme` for `dark:` utilities. Class-based dark mode (`.dark` on `<html>`) requires this line in `src/app/globals.css`:
@@ -219,6 +224,8 @@ Without it, `ThemeToggle` has no effect.
 - **`src/components/stats/AchievementBadges.tsx`** — badge system shown in the today page header.
 - **`useWeeklyReport`** — 7-day report, `staleTime: 5min`. `DayReport extends Stats` with `date` and `dayOfWeek`.
 - **`usePeriodStats(from, to)`** — arbitrary date range stats, `staleTime: 5min`.
+- **`useTodo(date)`** — React Query CRUD for `todos/{date}`. Optimistic update pattern (same as slot mutations). `onSettled` also invalidates `['todoHistory']` so the weekly page refreshes.
+- **`useTodoHistory()`** — fetches the past 7 days of `todos/{date}` docs in parallel; returns `DayTodoStats[]` (`{ date, total, checked, rate }`). Used by the weekly report page to render the todo completion history section.
 - Weekly page uses **Recharts `ComposedChart`** (required to mix `Bar` + `Line`; `BarChart` with `Line` fails).
 
 ### Push Notifications
@@ -307,5 +314,5 @@ This applies everywhere a date string is derived from an ISO timestamp for use i
 - All user-visible text must go through the i18n system (`useI18n()`) — no hardcoded Korean/English strings in components. **Exception**: `ActualColumn.tsx` uses hardcoded Korean throughout (legacy); new strings added to it may follow the existing pattern rather than forcing a full refactor.
 - Dark mode: `dark:` Tailwind prefix, toggled via `.dark` class on `<html>`, persisted to `localStorage`
 - Slot status colors: planned=blue, done=green, partial=orange, skipped=gray
-- Layout: sidebar (desktop, `w-52`) + bottom nav (mobile). Sidebar contains monthly `DatePicker` calendar then nav links.
+- Layout: sidebar (desktop, `w-52`) + bottom nav (mobile). Sidebar order: `DatePicker` → `SidebarPomodoro` → `SidebarTodo` → `NavLinks`. Each section separated by a border-t divider. Sidebar has `overflow-y-auto` so it scrolls if content overflows.
 - `scrollbar-hide` utility defined in `globals.css`

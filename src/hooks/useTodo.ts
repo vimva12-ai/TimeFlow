@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db, getAuthUser } from '@/lib/firebase/client';
+import { db, auth, getAuthUser } from '@/lib/firebase/client';
 
 export interface TodoItem {
   id: string;
@@ -15,8 +15,17 @@ interface TodoDoc {
   date: string;
 }
 
+/**
+ * auth.currentUser가 이미 로드돼 있으면 즉시 반환 (동기, 빠름).
+ * 초기 페이지 로드처럼 아직 복원 중이면 onAuthStateChanged 완료까지 대기.
+ */
+function resolveUser() {
+  if (auth.currentUser) return Promise.resolve(auth.currentUser);
+  return getAuthUser();
+}
+
 async function fetchTodo(date: string): Promise<TodoItem[]> {
-  const user = await getAuthUser();
+  const user = await resolveUser();
   if (!user) return [];
   const ref = doc(db, 'users', user.uid, 'todos', date);
   const snap = await getDoc(ref);
@@ -25,8 +34,9 @@ async function fetchTodo(date: string): Promise<TodoItem[]> {
 }
 
 async function saveTodo(date: string, items: TodoItem[]): Promise<void> {
-  const user = await getAuthUser();
-  if (!user) return;
+  const user = await resolveUser();
+  // null 반환(조용한 실패) 대신 throw → onSuccess 미호출 → 캐시 오염 방지
+  if (!user) throw new Error('Not authenticated');
   const ref = doc(db, 'users', user.uid, 'todos', date);
   await setDoc(ref, { items, date });
 }
@@ -43,12 +53,12 @@ export function useTodo(date: string) {
   const mutation = useMutation({
     mutationFn: (items: TodoItem[]) => saveTodo(date, items),
     onSuccess: (_, items) => {
-      // 재패치 없이 캐시를 동기적으로 업데이트 — isLoading 상태 변화 없음
-      // (invalidateQueries → refetch → isLoading=true → 로딩 화면 노출 방지)
+      // Firebase 쓰기 성공 후 캐시를 동기 업데이트 (refetch 없음 → 로딩 없음)
+      // 리마운트 시 이 캐시가 사용되어 staleTime 내에서 즉시 표시됨
       queryClient.setQueryData(['todo', date], items);
     },
     onSettled: () => {
-      // 주간 리포트 히스토리만 갱신 (todo 목록은 setQueryData로 이미 최신 상태)
+      // 주간 히스토리만 갱신 (todo 캐시는 onSuccess에서 이미 최신 상태)
       queryClient.invalidateQueries({ queryKey: ['todoHistory'] });
     },
   });

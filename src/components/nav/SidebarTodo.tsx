@@ -42,9 +42,13 @@ export default function SidebarTodo() {
     setLocalItems(null);
   }, [date]);
 
-  // Firebase 데이터 로드 완료 시 로컬 상태 초기화 (날짜당 최초 1회)
+  // Firebase 데이터가 바뀌면 로컬 상태에 반영:
+  // 1) 초기 로드 완료 시 (initializedRef = false → 한 번만 실행)
+  // 2) 캐시 히트 시 (isLoading=false, remoteItems 즉시 존재) → 로딩 스킵
   useEffect(() => {
-    if (!isLoading && !initializedRef.current) {
+    if (initializedRef.current) return;
+    // isLoading=false 이거나 캐시에 데이터가 있으면(remoteItems.length > 0) 바로 초기화
+    if (!isLoading || remoteItems.length > 0) {
       setLocalItems(remoteItems);
       initializedRef.current = true;
     }
@@ -52,7 +56,7 @@ export default function SidebarTodo() {
 
   // 표시용 items: 로컬 상태 우선, 로딩 중엔 빈 배열
   const items = localItems ?? [];
-  const isReady = !isLoading && localItems !== null;
+  const isReady = localItems !== null;
 
   function addItem() {
     const text = inputText.trim();

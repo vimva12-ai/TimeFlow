@@ -19,6 +19,8 @@ const PHASE_COLORS: Record<Phase, string> = {
   longBreak: '#a855f7',
 };
 
+const LS_KEY = 'timeflow-pomodoro';
+
 interface State {
   phase: Phase;
   remaining: number;
@@ -31,7 +33,8 @@ type Action =
   | { type: 'TOGGLE' }
   | { type: 'RESET' }
   | { type: 'SKIP' }
-  | { type: 'ADVANCE_PHASE' };
+  | { type: 'ADVANCE_PHASE' }
+  | { type: 'RESTORE'; state: State };
 
 function nextPhaseFor(phase: Phase, session: number): { phase: Phase; session: number } {
   if (phase === 'focus') {
@@ -55,8 +58,42 @@ function reducer(state: State, action: Action): State {
       const { phase, session } = nextPhaseFor(state.phase, state.session);
       return { phase, remaining: DURATIONS[phase], running: false, session };
     }
+    case 'RESTORE':
+      return action.state;
     default:
       return state;
+  }
+}
+
+// localStorage에서 타이머 상태 복원 (경과 시간 보정 포함)
+function loadPomodoroState(): State {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return { phase: 'focus', remaining: DURATIONS.focus, running: false, session: 0 };
+    const saved = JSON.parse(raw) as State & { savedAt: number };
+    const elapsed = Math.round((Date.now() - (saved.savedAt ?? Date.now())) / 1000);
+    let { phase, session } = saved;
+    let remaining = saved.running ? saved.remaining - elapsed : saved.remaining;
+    let running = saved.running;
+    // 타이머가 자연 종료된 경우 다음 페이즈로 전환 (자동 재개 없이 대기)
+    if (running && remaining <= 0) {
+      const next = nextPhaseFor(phase, session);
+      phase = next.phase;
+      session = next.session;
+      remaining = DURATIONS[phase];
+      running = false;
+    }
+    return { phase, remaining: Math.max(0, remaining), running, session };
+  } catch {
+    return { phase: 'focus', remaining: DURATIONS.focus, running: false, session: 0 };
+  }
+}
+
+function savePomodoroState(state: State): void {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({ ...state, savedAt: Date.now() }));
+  } catch {
+    // localStorage 접근 불가 환경 무시
   }
 }
 
@@ -101,6 +138,17 @@ export default function SidebarPomodoro() {
     session: 0,
   });
   const prevRemaining = useRef(state.remaining);
+
+  // 마운트 시 localStorage에서 타이머 상태 복원
+  useEffect(() => {
+    const saved = loadPomodoroState();
+    dispatch({ type: 'RESTORE', state: saved });
+  }, []);
+
+  // 상태 변경 시 localStorage에 저장 (매 TICK 포함)
+  useEffect(() => {
+    savePomodoroState(state);
+  }, [state]);
 
   useEffect(() => {
     if (!state.running) return;

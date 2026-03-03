@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { format, subDays } from 'date-fns';
+import { format } from 'date-fns';
 import { Plus, X, RotateCcw, CheckSquare, ChevronDown, ChevronUp, BarChart2 } from 'lucide-react';
 import { useTodo, type TodoItem } from '@/hooks/useTodo';
-import { useTodoStats } from '@/hooks/useTodoStats';
+import { useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
 
 const MAX_ITEMS = 15;
@@ -17,10 +17,9 @@ function generateId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-type StatPeriod = 'today' | 'week' | 'month' | 'custom';
-
 export default function SidebarTodo() {
   const { t } = useI18n();
+  const queryClient = useQueryClient();
   const [date, setDate] = useState(todayStr);
   const { items: remoteItems, isLoading, save } = useTodo(date);
   const [inputText, setInputText] = useState('');
@@ -33,21 +32,19 @@ export default function SidebarTodo() {
   // 확장/축소 상태
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // 통계 기간 상태
-  const [statPeriod, setStatPeriod] = useState<StatPeriod>('today');
-  const [customFrom, setCustomFrom] = useState(() =>
-    format(subDays(new Date(), 6), 'yyyy-MM-dd')
-  );
-  const [customTo, setCustomTo] = useState(todayStr);
-
-  // 자정에 날짜 갱신 → 새 날짜로 todos 로드
+  // 자정에 날짜 갱신 → 새 날짜로 todos 로드 + 통계 캐시 무효화
   useEffect(() => {
     const now = new Date();
     const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     const ms = midnight.getTime() - now.getTime();
-    const timer = setTimeout(() => setDate(todayStr()), ms);
+    const timer = setTimeout(() => {
+      setDate(todayStr());
+      // 날짜가 바뀌면 할 일 통계 캐시 무효화하여 최신 데이터 반영
+      queryClient.invalidateQueries({ queryKey: ['todoHistory'] });
+      queryClient.invalidateQueries({ queryKey: ['todoStats'] });
+    }, ms);
     return () => clearTimeout(timer);
-  }, [date]);
+  }, [date, queryClient]);
 
   // 날짜가 바뀌면 로컬 상태 초기화 (새 날짜 데이터를 Firebase에서 다시 로드)
   useEffect(() => {
@@ -69,20 +66,6 @@ export default function SidebarTodo() {
   // 표시용 items: 로컬 상태 우선, 로딩 중엔 빈 배열
   const items = localItems ?? [];
   const isReady = localItems !== null;
-
-  // 통계 훅 — 기간 계산 (항상 호출, enabled로 제어)
-  const statsFrom =
-    statPeriod === 'week'
-      ? format(subDays(new Date(), 6), 'yyyy-MM-dd')
-      : statPeriod === 'month'
-      ? format(subDays(new Date(), 29), 'yyyy-MM-dd')
-      : statPeriod === 'custom'
-      ? customFrom
-      : '';
-  const statsTo =
-    statPeriod !== 'today' ? (statPeriod === 'custom' ? customTo : date) : '';
-
-  const { data: rangeStats, isLoading: statsLoading } = useTodoStats(statsFrom, statsTo);
 
   function addItem() {
     const text = inputText.trim();
@@ -235,109 +218,23 @@ export default function SidebarTodo() {
           </div>
         ))}
 
-      {/* 통계 섹션 */}
+      {/* 오늘 달성률 통계 */}
       {isReady && (
         <div className="flex flex-col gap-1 border-t border-gray-100 dark:border-gray-800 pt-1.5">
-          {/* 헤더: 아이콘 + 라벨 + 기간 탭 */}
           <div className="flex items-center gap-1 px-1">
             <BarChart2 className="w-3 h-3 text-purple-400 flex-shrink-0" />
             <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">
               {t.todoStats}
             </span>
-            <div className="flex items-center gap-0.5 ml-auto">
-              {(['today', 'week', 'month', 'custom'] as const).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setStatPeriod(p)}
-                  className={`text-[9px] px-1 py-0.5 rounded transition-colors ${
-                    statPeriod === p
-                      ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 font-semibold'
-                      : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400'
-                  }`}
-                >
-                  {p === 'today'
-                    ? t.today
-                    : p === 'week'
-                    ? t.todoStatWeek
-                    : p === 'month'
-                    ? t.todoStatMonth
-                    : t.todoStatCustom}
-                </button>
-              ))}
-            </div>
           </div>
-
-          {/* 기간 직접 설정 날짜 입력 */}
-          {statPeriod === 'custom' && (
-            <div className="flex items-center gap-1 px-1">
-              <span className="text-[9px] text-gray-400 flex-shrink-0">{t.todoStatFrom}</span>
-              <input
-                type="date"
-                value={customFrom}
-                max={customTo}
-                onChange={(e) => setCustomFrom(e.target.value)}
-                className="flex-1 text-[9px] bg-transparent border-b border-gray-200 dark:border-gray-700 outline-none py-0.5 text-gray-600 dark:text-gray-400 min-w-0"
-              />
-              <span className="text-[9px] text-gray-400 flex-shrink-0">{t.todoStatTo}</span>
-              <input
-                type="date"
-                value={customTo}
-                min={customFrom}
-                max={todayStr()}
-                onChange={(e) => setCustomTo(e.target.value)}
-                className="flex-1 text-[9px] bg-transparent border-b border-gray-200 dark:border-gray-700 outline-none py-0.5 text-gray-600 dark:text-gray-400 min-w-0"
-              />
-            </div>
-          )}
-
-          {/* 통계 수치 */}
-          {statPeriod === 'today' ? (
-            <div className="flex items-center justify-between px-1">
-              <span className="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
-                {checkedCount}/{totalCount}
-              </span>
-              <span className="text-sm font-bold tabular-nums text-purple-600 dark:text-purple-400">
-                {Math.round(progressPct)}%
-              </span>
-            </div>
-          ) : statsLoading ? (
-            <div className="text-[10px] text-gray-400 dark:text-gray-500 text-center py-1">
-              {t.loading}
-            </div>
-          ) : rangeStats ? (
-            <>
-              <div className="flex items-center justify-between px-1">
-                <span className="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
-                  {rangeStats.checkedItems}/{rangeStats.totalItems} · {t.daysBasis(rangeStats.days)}
-                </span>
-                <span className="text-sm font-bold tabular-nums text-purple-600 dark:text-purple-400">
-                  {rangeStats.avgRate}%
-                </span>
-              </div>
-
-              {/* 일별 미니 바차트 */}
-              {rangeStats.dayStats.length > 0 && (
-                <div className="flex items-end gap-px h-8 px-1">
-                  {rangeStats.dayStats.map((day) => (
-                    <div
-                      key={day.date}
-                      className={`flex-1 rounded-sm min-h-[2px] transition-all ${
-                        day.total === 0
-                          ? 'bg-gray-200 dark:bg-gray-700'
-                          : day.rate >= 80
-                          ? 'bg-purple-500'
-                          : day.rate >= 50
-                          ? 'bg-amber-400'
-                          : 'bg-red-400'
-                      }`}
-                      style={{ height: `${day.total === 0 ? 4 : Math.max(day.rate, 8)}%` }}
-                      title={`${day.date}: ${day.rate}% (${day.checked}/${day.total})`}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          ) : null}
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
+              {checkedCount}/{totalCount}
+            </span>
+            <span className="text-sm font-bold tabular-nums text-purple-600 dark:text-purple-400">
+              {Math.round(progressPct)}%
+            </span>
+          </div>
         </div>
       )}
     </div>

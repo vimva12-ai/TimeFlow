@@ -4,6 +4,7 @@ import { useState, useRef } from 'react';
 import { useWeeklyReport } from '@/hooks/useWeeklyReport';
 import { usePeriodStats } from '@/hooks/usePeriodStats';
 import { useTodoHistory } from '@/hooks/useTodoHistory';
+import { useTodoStats } from '@/hooks/useTodoStats';
 import { format, subDays } from 'date-fns';
 import { useI18n } from '@/lib/i18n';
 import {
@@ -31,6 +32,8 @@ const DAY_LABELS: Record<string, string[]> = {
   ja: ['日', '月', '火', '水', '木', '金', '土'],
 };
 
+type TodoStatPeriod = 'week' | 'month' | 'custom';
+
 export default function WeeklyPage() {
   const { data: report, isLoading } = useWeeklyReport();
   const { data: todoHistory } = useTodoHistory();
@@ -42,6 +45,24 @@ export default function WeeklyPage() {
   const { data: period, isFetching: periodFetching } = usePeriodStats(periodFrom, periodTo);
   const fromInputRef = useRef<HTMLInputElement>(null);
   const toInputRef = useRef<HTMLInputElement>(null);
+
+  // 할 일 달성률 기간 탭
+  const [todoStatPeriod, setTodoStatPeriod] = useState<TodoStatPeriod>('week');
+  const [todoCustomFrom, setTodoCustomFrom] = useState(() =>
+    format(subDays(new Date(), 6), 'yyyy-MM-dd')
+  );
+  const [todoCustomTo, setTodoCustomTo] = useState(today);
+
+  const todoStatsFrom =
+    todoStatPeriod === 'week'
+      ? format(subDays(new Date(), 6), 'yyyy-MM-dd')
+      : todoStatPeriod === 'month'
+      ? format(subDays(new Date(), 29), 'yyyy-MM-dd')
+      : todoCustomFrom;
+  const todoStatsTo =
+    todoStatPeriod === 'custom' ? todoCustomTo : today;
+
+  const { data: todoRangeStats, isLoading: todoStatsLoading } = useTodoStats(todoStatsFrom, todoStatsTo);
 
   const isPresetActive = (from: string) => !customMode && periodFrom === from && periodTo === today;
   const isCustomActive = customMode || (!presets.some((p) => p.from === periodFrom && periodTo === today));
@@ -221,26 +242,94 @@ export default function WeeklyPage() {
       </div>
 
       {/* ── 할 일 달성률 ── */}
-      {todoHistory && (() => {
-        const daysWithData = todoHistory.filter((d) => d.total > 0);
-        const avgRate = daysWithData.length > 0
-          ? Math.round(daysWithData.reduce((s, d) => s + d.rate, 0) / daysWithData.length)
-          : 0;
-        return (
-          <div className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800 space-y-3">
-            {/* 헤더 + 7일 평균 */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800 space-y-3">
+        {/* 헤더 + 기간 탭 */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t.todoWeeklyTitle}</h2>
+          <div className="flex items-center gap-1">
+            {(['week', 'month', 'custom'] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => setTodoStatPeriod(p)}
+                className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                  todoStatPeriod === p
+                    ? 'bg-purple-600 text-white border-purple-600'
+                    : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                }`}
+              >
+                {p === 'week' ? t.todoStatWeek : p === 'month' ? t.todoStatMonth : t.todoStatCustom}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 기간 직접 설정 */}
+        {todoStatPeriod === 'custom' && (
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={todoCustomFrom}
+              max={todoCustomTo}
+              onChange={(e) => setTodoCustomFrom(e.target.value)}
+              className="flex-1 px-2 py-1.5 text-sm border border-purple-400 dark:border-purple-500 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+            />
+            <span className="text-gray-400 text-sm">~</span>
+            <input
+              type="date"
+              value={todoCustomTo}
+              min={todoCustomFrom}
+              max={today}
+              onChange={(e) => setTodoCustomTo(e.target.value)}
+              className="flex-1 px-2 py-1.5 text-sm border border-purple-400 dark:border-purple-500 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+            />
+          </div>
+        )}
+
+        {/* 기간 평균 달성률 */}
+        {todoStatsLoading ? (
+          <div className="text-center text-sm text-gray-400 py-2">{t.calculating}</div>
+        ) : todoRangeStats ? (
+          <>
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t.todoWeeklyTitle}</h2>
-              {daysWithData.length > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-gray-400 dark:text-gray-500">7일 평균</span>
-                  <span className="text-base font-bold tabular-nums text-purple-600 dark:text-purple-400">{avgRate}%</span>
-                </div>
-              )}
+              <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">
+                {todoRangeStats.checkedItems}/{todoRangeStats.totalItems} · {t.daysBasis(todoRangeStats.days)}
+              </span>
+              <span className="text-base font-bold tabular-nums text-purple-600 dark:text-purple-400">
+                {todoRangeStats.avgRate}%
+              </span>
             </div>
 
-            {/* 일별 달성률 */}
-            <div className="space-y-2">
+            {/* 일별 미니 바차트 */}
+            {todoRangeStats.dayStats.length > 0 && (
+              <div className="flex items-end gap-px h-10 mt-1">
+                {todoRangeStats.dayStats.map((day) => (
+                  <div
+                    key={day.date}
+                    className={`flex-1 rounded-sm min-h-[2px] transition-all ${
+                      day.total === 0
+                        ? 'bg-gray-200 dark:bg-gray-700'
+                        : day.rate >= 80
+                        ? 'bg-purple-500'
+                        : day.rate >= 50
+                        ? 'bg-amber-400'
+                        : 'bg-red-400'
+                    }`}
+                    style={{ height: `${day.total === 0 ? 4 : Math.max(day.rate, 8)}%` }}
+                    title={`${day.date}: ${day.rate}% (${day.checked}/${day.total})`}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        ) : null}
+
+        {/* 7일 일별 달성률 바 (항상 표시) */}
+        {todoHistory && (() => {
+          const daysWithData = todoHistory.filter((d) => d.total > 0);
+          if (daysWithData.length === 0) return null;
+          return (
+            <div className="space-y-2 border-t border-gray-100 dark:border-gray-800 pt-3">
+              <div className="text-xs font-medium text-gray-500 dark:text-gray-400">최근 7일 상세</div>
               {todoHistory.map((day) => {
                 const dayLabel = dayLabels[new Date(day.date).getDay()];
                 const isToday = day.date === today;
@@ -268,9 +357,9 @@ export default function WeeklyPage() {
                 );
               })}
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
+      </div>
     </div>
   );
 }

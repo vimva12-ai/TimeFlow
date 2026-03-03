@@ -5,6 +5,8 @@ import DatePicker from '@/components/nav/DatePicker';
 import ThemeToggle from '@/components/ThemeToggle';
 import LanguageSelector from '@/components/LanguageSelector';
 import NavLinks, { BottomNav } from '@/components/nav/NavLinks';
+import SidebarPomodoro from '@/components/nav/SidebarPomodoro';
+import SidebarTodo from '@/components/nav/SidebarTodo';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
@@ -37,6 +39,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {/* 사이드바 */}
         <aside className="hidden md:flex flex-col w-52 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 gap-3 overflow-y-auto">
           <DatePicker />
+          <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
+            <SidebarPomodoro />
+          </div>
+          <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
+            <SidebarTodo />
+          </div>
           <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
             <NavLinks />
           </div>

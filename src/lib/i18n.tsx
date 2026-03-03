@@ -93,6 +93,20 @@ const translations = {
     durationLabel: '지속 시간',
     addSchedule: '일정 추가',
     addRecord: '기록 추가',
+    // 뽀모도로
+    pomodoro: '뽀모도로',
+    pomodoroFocus: '집중',
+    pomodoroBreak: '휴식',
+    pomodoroLongBreak: '긴 휴식',
+    // 할 일
+    todayTodo: '오늘 할 일',
+    todoAdd: '할 일 추가...',
+    todoReset: '초기화',
+    todoEmpty: '할 일을 추가해보세요',
+    todoMaxReached: (n: number) => `최대 ${n}개까지 입력 가능`,
+    // 주간 리포트 - 할일 달성률
+    todoWeeklyTitle: '할 일 달성률',
+    todoNoData: '할 일 데이터 없음',
     // 주간 리포트
     loading: '로딩 중...',
     noWeeklyData: '이번 주 데이터가 없습니다.',
@@ -191,6 +205,17 @@ const translations = {
     durationLabel: 'Duration',
     addSchedule: 'Add Schedule',
     addRecord: 'Add Record',
+    pomodoro: 'Pomodoro',
+    pomodoroFocus: 'Focus',
+    pomodoroBreak: 'Break',
+    pomodoroLongBreak: 'Long Break',
+    todayTodo: "Today's Tasks",
+    todoAdd: 'Add task...',
+    todoReset: 'Reset',
+    todoEmpty: 'Add a task to get started',
+    todoMaxReached: (n: number) => `Max ${n} items`,
+    todoWeeklyTitle: 'Task Completion',
+    todoNoData: 'No task data',
     loading: 'Loading...',
     noWeeklyData: 'No data this week.',
     registerForStats: 'Add schedules in Today tab to see stats.',
@@ -288,6 +313,17 @@ const translations = {
     durationLabel: '所要時間',
     addSchedule: '予定を追加',
     addRecord: '記録を追加',
+    pomodoro: 'ポモドーロ',
+    pomodoroFocus: '集中',
+    pomodoroBreak: '休憩',
+    pomodoroLongBreak: '長い休憩',
+    todayTodo: '今日のタスク',
+    todoAdd: 'タスクを追加...',
+    todoReset: 'リセット',
+    todoEmpty: 'タスクを追加してください',
+    todoMaxReached: (n: number) => `最大${n}件まで`,
+    todoWeeklyTitle: 'タスク達成率',
+    todoNoData: 'データなし',
     loading: '読み込み中...',
     noWeeklyData: '今週のデータがありません。',
     registerForStats: '今日タブで予定を登録すると統計が表示されます。',
@@ -406,6 +442,17 @@ export interface Translations {
   customRange: string;
   completed: string;
   dayOfWeekSuffix: string;
+  pomodoro: string;
+  pomodoroFocus: string;
+  pomodoroBreak: string;
+  pomodoroLongBreak: string;
+  todayTodo: string;
+  todoAdd: string;
+  todoReset: string;
+  todoEmpty: string;
+  todoMaxReached: (n: number) => string;
+  todoWeeklyTitle: string;
+  todoNoData: string;
 }
 
 interface I18nContextValue {

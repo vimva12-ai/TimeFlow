@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { useWeeklyReport } from '@/hooks/useWeeklyReport';
 import { usePeriodStats } from '@/hooks/usePeriodStats';
+import { useTodoHistory } from '@/hooks/useTodoHistory';
 import { format, subDays } from 'date-fns';
 import { useI18n } from '@/lib/i18n';
 import {
@@ -32,6 +33,7 @@ const DAY_LABELS: Record<string, string[]> = {
 
 export default function WeeklyPage() {
   const { data: report, isLoading } = useWeeklyReport();
+  const { data: todoHistory } = useTodoHistory();
   const { locale, t } = useI18n();
 
   const [periodFrom, setPeriodFrom] = useState(presets[0].from);
@@ -217,6 +219,41 @@ export default function WeeklyPage() {
           </div>
         ) : null}
       </div>
+
+      {/* ── 할 일 달성률 ── */}
+      {todoHistory && todoHistory.some((d) => d.total > 0) && (
+        <div className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800 space-y-3">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t.todoWeeklyTitle}</h2>
+          <div className="space-y-2">
+            {todoHistory.map((day) => {
+              const dayLabel = dayLabels[new Date(day.date).getDay()];
+              const isToday = day.date === today;
+              return (
+                <div key={day.date} className="flex items-center gap-2">
+                  <span className={`text-xs w-6 text-center flex-shrink-0 font-medium ${isToday ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                    {dayLabel}
+                  </span>
+                  {day.total === 0 ? (
+                    <span className="text-xs text-gray-300 dark:text-gray-600 flex-1">{t.todoNoData}</span>
+                  ) : (
+                    <>
+                      <div className="flex-1 h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-purple-500 rounded-full transition-all duration-500"
+                          style={{ width: `${day.rate}%` }}
+                        />
+                      </div>
+                      <span className="text-xs tabular-nums text-purple-600 dark:text-purple-400 w-16 text-right flex-shrink-0">
+                        {day.checked}/{day.total} ({day.rate}%)
+                      </span>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

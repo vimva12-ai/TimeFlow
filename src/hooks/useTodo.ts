@@ -42,11 +42,13 @@ export function useTodo(date: string) {
 
   const mutation = useMutation({
     mutationFn: (items: TodoItem[]) => saveTodo(date, items),
+    onSuccess: (_, items) => {
+      // 재패치 없이 캐시를 동기적으로 업데이트 — isLoading 상태 변화 없음
+      // (invalidateQueries → refetch → isLoading=true → 로딩 화면 노출 방지)
+      queryClient.setQueryData(['todo', date], items);
+    },
     onSettled: () => {
-      // SidebarTodo가 로컬 상태로 UI를 관리하므로 ['todo', date] invalidate가
-      // 경쟁조건 없이 안전함. 리마운트 시 최신 Firebase 데이터를 보장하기 위해
-      // 양쪽 모두 갱신.
-      queryClient.invalidateQueries({ queryKey: ['todo', date] });
+      // 주간 리포트 히스토리만 갱신 (todo 목록은 setQueryData로 이미 최신 상태)
       queryClient.invalidateQueries({ queryKey: ['todoHistory'] });
     },
   });

@@ -132,6 +132,18 @@ export default function SidebarTodo() {
         )}
       </div>
 
+      {/* 하단 달성률 */}
+      {!isLoading && totalCount > 0 && (
+        <div className="flex items-center justify-between px-1 pt-0.5 border-t border-gray-100 dark:border-gray-800">
+          <span className="text-[10px] text-gray-400 dark:text-gray-500">
+            {checkedCount}/{totalCount}
+          </span>
+          <span className="text-sm font-bold tabular-nums text-purple-600 dark:text-purple-400">
+            {Math.round(progressPct)}%
+          </span>
+        </div>
+      )}
+
       {/* 입력 */}
       {!isLoading && (
         totalCount < MAX_ITEMS ? (

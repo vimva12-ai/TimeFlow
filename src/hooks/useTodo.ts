@@ -52,7 +52,9 @@ export function useTodo(date: string) {
       if (ctx?.prev) queryClient.setQueryData(['todo', date], ctx.prev);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['todo', date] });
+      // ['todo', date]는 invalidate하지 않음 — onMutate 옵티미스틱 업데이트가
+      // 이미 정확한 상태를 갖고 있으므로 서버 리패치 시 경쟁조건(체크 해제 불가,
+      // 두 번째 항목 추가 불가) 발생. 주간 리포트용 히스토리만 갱신.
       queryClient.invalidateQueries({ queryKey: ['todoHistory'] });
     },
   });

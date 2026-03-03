@@ -71,7 +71,7 @@ All types are in `src/types/database.ts`. Key composites: `DailyPlanWithSlots`, 
 
 Two layers:
 1. **React Query** (`src/lib/providers.tsx`) — server state. `staleTime: 30s`, `gcTime: 5min`.
-   - Query keys: `['dailyPlan', date]`, `['weeklyReport']`, `['periodStats', from, to]`, `['templates']`.
+   - Query keys: `['dailyPlan', date]`, `['weeklyReport']`, `['periodStats', from, to]`, `['templates']`, `['todo', date]`, `['todoHistory']`.
 2. **Zustand** (`src/store/timetableStore.ts`) — UI only:
    - `selectedDate` (YYYY-MM-DD), `editingSlotId` — not persisted
    - `startHour` (default 5), `endHour` (default 24), `slotHeight` (default 36px) — persisted to `localStorage` under `'timeflow-grid-settings'`
@@ -206,9 +206,9 @@ return Math.abs(raw - nearest30) <= 5 ? nearest30 : raw;
 
 - **`PomodoroTimer.tsx`** — fixed-position widget (bottom-right). Pure client state via `useReducer`. Phases: focus(25min) → break(5min), every 4th break becomes long-break(15min). Sends browser `Notification` when each phase ends (requires `Notification.permission === 'granted'`).
 
-- **`SidebarPomodoro.tsx`** — compact sidebar pomodoro timer (in `src/components/nav/`). Pure client state via `useReducer`. Phases: focus(25min) → break(5min), every 4th focus becomes long-break(15min). Plays a Web Audio API beep on phase completion (`try/catch` for iOS/unsupported environments). SVG circular progress ring. Session dot indicators (4 dots; filled count = `session % 4`, shows all 4 during long-break). `SKIP` and auto `ADVANCE_PHASE` share the same reducer case via fall-through.
+- **`SidebarPomodoro.tsx`** — compact sidebar pomodoro timer (in `src/components/nav/`). Pure client state via `useReducer`. Phases: focus(25min) → break(5min), every 4th focus becomes long-break(15min). Plays a Web Audio API beep on phase completion (`try/catch` for iOS/unsupported environments). SVG circular progress ring. Session dot indicators (4 dots; filled count = `session % 4`, shows all 4 during long-break). `SKIP` and auto `ADVANCE_PHASE` share the same reducer case via fall-through. **Fullscreen mode**: `Maximize2` button renders a `createPortal` overlay to `document.body` (z-index 100) with a 280px SVG timer; closed via `X` button, backdrop click, or `ESC` key. Shared `state`/`dispatch` means the timer keeps running across both views.
 
-- **`SidebarTodo.tsx`** — sidebar daily todo list (in `src/components/nav/`). Reads/writes via `useTodo(date)` hook. Max 15 items. Progress bar shows `checked/total`. Input field hidden while loading to prevent writes against stale empty state. Schedules a `setTimeout` to `setDate(todayStr())` at local midnight so the list auto-switches to the new day without a page reload.
+- **`SidebarTodo.tsx`** — sidebar daily todo list (in `src/components/nav/`). Reads/writes via `useTodo(date)` hook. Max 15 items. Progress bar + bottom completion rate (`checked/total · N%`) shown when items exist. Input field hidden while loading to prevent writes against stale empty state. Schedules a `setTimeout` to `setDate(todayStr())` at local midnight so the list auto-switches to the new day without a page reload.
 
 ### Dark Mode
 
@@ -224,7 +224,7 @@ Without it, `ThemeToggle` has no effect.
 - **`src/components/stats/AchievementBadges.tsx`** — badge system shown in the today page header.
 - **`useWeeklyReport`** — 7-day report, `staleTime: 5min`. `DayReport extends Stats` with `date` and `dayOfWeek`.
 - **`usePeriodStats(from, to)`** — arbitrary date range stats, `staleTime: 5min`.
-- **`useTodo(date)`** — React Query CRUD for `todos/{date}`. Optimistic update pattern (same as slot mutations). `onSettled` also invalidates `['todoHistory']` so the weekly page refreshes.
+- **`useTodo(date)`** — React Query CRUD for `todos/{date}`. Optimistic update pattern (same as slot mutations). **Critical**: `onSettled` invalidates only `['todoHistory']`, NOT `['todo', date]`. Invalidating `['todo', date]` caused a race condition where the Firestore refetch overwrote the optimistic cache before the next render, breaking checkbox toggle and sequential item adds.
 - **`useTodoHistory()`** — fetches the past 7 days of `todos/{date}` docs in parallel; returns `DayTodoStats[]` (`{ date, total, checked, rate }`). Used by the weekly report page to render the todo completion history section.
 - Weekly page uses **Recharts `ComposedChart`** (required to mix `Bar` + `Line`; `BarChart` with `Line` fails).
 

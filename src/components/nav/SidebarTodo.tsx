@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { Plus, X, RotateCcw, CheckSquare } from 'lucide-react';
 import { useTodo, type TodoItem } from '@/hooks/useTodo';
@@ -19,8 +19,13 @@ function generateId() {
 export default function SidebarTodo() {
   const { t } = useI18n();
   const [date, setDate] = useState(todayStr);
-  const { items, isLoading, save } = useTodo(date);
+  const { items: remoteItems, isLoading, save } = useTodo(date);
   const [inputText, setInputText] = useState('');
+
+  // 로컬 상태로 즉시 UI 업데이트 (React Query 비동기 캐시 타이밍 문제 방지)
+  // null = 아직 Firebase 데이터 미초기화 (로딩 중)
+  const [localItems, setLocalItems] = useState<TodoItem[] | null>(null);
+  const initializedRef = useRef(false);
 
   // 자정에 날짜 갱신 → 새 날짜로 todos 로드
   useEffect(() => {
@@ -31,22 +36,51 @@ export default function SidebarTodo() {
     return () => clearTimeout(timer);
   }, [date]);
 
+  // 날짜가 바뀌면 로컬 상태 초기화 (새 날짜 데이터를 Firebase에서 다시 로드)
+  useEffect(() => {
+    initializedRef.current = false;
+    setLocalItems(null);
+  }, [date]);
+
+  // Firebase 데이터 로드 완료 시 로컬 상태 초기화 (날짜당 최초 1회)
+  useEffect(() => {
+    if (!isLoading && !initializedRef.current) {
+      setLocalItems(remoteItems);
+      initializedRef.current = true;
+    }
+  }, [isLoading, remoteItems]);
+
+  // 표시용 items: 로컬 상태 우선, 로딩 중엔 빈 배열
+  const items = localItems ?? [];
+  const isReady = !isLoading && localItems !== null;
+
   function addItem() {
     const text = inputText.trim();
     if (!text || items.length >= MAX_ITEMS) return;
-    save([...items, { id: generateId(), text, checked: false }]);
+    // 로컬 상태를 먼저 동기적으로 업데이트 → 즉시 반영
+    const newItems = [...items, { id: generateId(), text, checked: false }];
+    setLocalItems(newItems);
+    save(newItems);
     setInputText('');
   }
 
   function toggleItem(id: string) {
-    save(items.map((item): TodoItem => item.id === id ? { ...item, checked: !item.checked } : item));
+    // 로컬 상태를 먼저 동기적으로 업데이트 → 체크/언체크 즉시 반영
+    const newItems = items.map((item): TodoItem =>
+      item.id === id ? { ...item, checked: !item.checked } : item
+    );
+    setLocalItems(newItems);
+    save(newItems);
   }
 
   function deleteItem(id: string) {
-    save(items.filter((item) => item.id !== id));
+    const newItems = items.filter((item) => item.id !== id);
+    setLocalItems(newItems);
+    save(newItems);
   }
 
   function resetAll() {
+    setLocalItems([]);
     save([]);
   }
 
@@ -93,7 +127,7 @@ export default function SidebarTodo() {
 
       {/* 할 일 목록 */}
       <div className="flex flex-col gap-0.5 max-h-44 overflow-y-auto scrollbar-hide">
-        {isLoading ? (
+        {!isReady ? (
           <div className="text-[11px] text-gray-400 dark:text-gray-500 text-center py-2">{t.loading}</div>
         ) : totalCount === 0 ? (
           <div className="text-[11px] text-gray-400 dark:text-gray-500 text-center py-2">
@@ -133,7 +167,7 @@ export default function SidebarTodo() {
       </div>
 
       {/* 하단 달성률 */}
-      {!isLoading && totalCount > 0 && (
+      {isReady && totalCount > 0 && (
         <div className="flex items-center justify-between px-1 pt-0.5 border-t border-gray-100 dark:border-gray-800">
           <span className="text-[10px] text-gray-400 dark:text-gray-500">
             {checkedCount}/{totalCount}
@@ -145,7 +179,7 @@ export default function SidebarTodo() {
       )}
 
       {/* 입력 */}
-      {!isLoading && (
+      {isReady && (
         totalCount < MAX_ITEMS ? (
           <div className="flex items-center gap-1 px-1">
             <input

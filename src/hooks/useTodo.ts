@@ -42,19 +42,11 @@ export function useTodo(date: string) {
 
   const mutation = useMutation({
     mutationFn: (items: TodoItem[]) => saveTodo(date, items),
-    onMutate: async (items) => {
-      await queryClient.cancelQueries({ queryKey: ['todo', date] });
-      const prev = queryClient.getQueryData<TodoItem[]>(['todo', date]);
-      queryClient.setQueryData(['todo', date], items);
-      return { prev };
-    },
-    onError: (_err, _items, ctx) => {
-      if (ctx?.prev) queryClient.setQueryData(['todo', date], ctx.prev);
-    },
     onSettled: () => {
-      // ['todo', date]는 invalidate하지 않음 — onMutate 옵티미스틱 업데이트가
-      // 이미 정확한 상태를 갖고 있으므로 서버 리패치 시 경쟁조건(체크 해제 불가,
-      // 두 번째 항목 추가 불가) 발생. 주간 리포트용 히스토리만 갱신.
+      // SidebarTodo가 로컬 상태로 UI를 관리하므로 ['todo', date] invalidate가
+      // 경쟁조건 없이 안전함. 리마운트 시 최신 Firebase 데이터를 보장하기 위해
+      // 양쪽 모두 갱신.
+      queryClient.invalidateQueries({ queryKey: ['todo', date] });
       queryClient.invalidateQueries({ queryKey: ['todoHistory'] });
     },
   });

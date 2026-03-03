@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useReducer } from 'react';
 import { Play, Pause, RotateCcw, SkipForward } from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
 
 type Phase = 'focus' | 'break' | 'longBreak';
 
@@ -11,10 +12,10 @@ const DURATIONS: Record<Phase, number> = {
   longBreak: 15 * 60,
 };
 
-const PHASE_LABELS: Record<Phase, { ko: string; color: string }> = {
-  focus: { ko: '집중', color: '#3b82f6' },
-  break: { ko: '휴식', color: '#22c55e' },
-  longBreak: { ko: '긴 휴식', color: '#a855f7' },
+const PHASE_COLORS: Record<Phase, string> = {
+  focus: '#3b82f6',
+  break: '#22c55e',
+  longBreak: '#a855f7',
 };
 
 interface State {
@@ -84,6 +85,7 @@ const CY = 38;
 const SIZE = 76;
 
 export default function SidebarPomodoro() {
+  const { t } = useI18n();
   const [state, dispatch] = useReducer(reducer, {
     phase: 'focus',
     remaining: DURATIONS.focus,
@@ -113,15 +115,23 @@ export default function SidebarPomodoro() {
   const dashOffset = CIRCUMFERENCE * (1 - progress);
   const mm = String(Math.floor(state.remaining / 60)).padStart(2, '0');
   const ss = String(state.remaining % 60).padStart(2, '0');
-  const { ko: phaseLabel, color } = PHASE_LABELS[state.phase];
-  const dotsFilled = state.session % 4;
+  const color = PHASE_COLORS[state.phase];
+  const phaseLabels: Record<Phase, string> = {
+    focus: t.pomodoroFocus,
+    break: t.pomodoroBreak,
+    longBreak: t.pomodoroLongBreak,
+  };
+  const phaseLabel = phaseLabels[state.phase];
+  // 4세션 완료(긴 휴식 중)일 때 4개 모두 채워서 표시
+  const rawFilled = state.session % 4;
+  const dotsFilled = rawFilled === 0 && state.session > 0 ? 4 : rawFilled;
 
   return (
     <div className="flex flex-col items-center gap-2 py-1.5">
       {/* 헤더 */}
       <div className="flex items-center justify-between w-full px-1">
         <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-          뽀모도로
+          {t.pomodoro}
         </span>
         <span
           className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"

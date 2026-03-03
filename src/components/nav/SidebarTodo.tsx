@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Plus, X, RotateCcw, CheckSquare } from 'lucide-react';
 import { useTodo, type TodoItem } from '@/hooks/useTodo';
+import { useI18n } from '@/lib/i18n';
 
 const MAX_ITEMS = 15;
 
@@ -16,6 +17,7 @@ function generateId() {
 }
 
 export default function SidebarTodo() {
+  const { t } = useI18n();
   const [date, setDate] = useState(todayStr);
   const { items, isLoading, save } = useTodo(date);
   const [inputText, setInputText] = useState('');
@@ -59,7 +61,7 @@ export default function SidebarTodo() {
         <div className="flex items-center gap-1.5">
           <CheckSquare className="w-3.5 h-3.5 text-purple-500" />
           <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-            오늘 할 일
+            {t.todayTodo}
           </span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -92,10 +94,10 @@ export default function SidebarTodo() {
       {/* 할 일 목록 */}
       <div className="flex flex-col gap-0.5 max-h-44 overflow-y-auto scrollbar-hide">
         {isLoading ? (
-          <div className="text-[11px] text-gray-400 dark:text-gray-500 text-center py-2">로딩 중...</div>
+          <div className="text-[11px] text-gray-400 dark:text-gray-500 text-center py-2">{t.loading}</div>
         ) : totalCount === 0 ? (
           <div className="text-[11px] text-gray-400 dark:text-gray-500 text-center py-2">
-            할 일을 추가해보세요
+            {t.todoEmpty}
           </div>
         ) : (
           items.map((item) => (
@@ -131,29 +133,31 @@ export default function SidebarTodo() {
       </div>
 
       {/* 입력 */}
-      {totalCount < MAX_ITEMS ? (
-        <div className="flex items-center gap-1 px-1">
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && addItem()}
-            placeholder="할 일 추가..."
-            className="flex-1 text-[11px] bg-transparent border-b border-gray-200 dark:border-gray-700 outline-none py-0.5 text-gray-700 dark:text-gray-300 placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:border-purple-400 dark:focus:border-purple-600 transition-colors min-w-0"
-          />
-          <button
-            onClick={addItem}
-            disabled={!inputText.trim()}
-            className="p-0.5 rounded text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 disabled:opacity-30 transition-colors flex-shrink-0"
-            aria-label="추가"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      ) : (
-        <div className="text-[10px] text-center text-gray-400 dark:text-gray-500 px-1">
-          최대 {MAX_ITEMS}개까지 입력 가능
-        </div>
+      {!isLoading && (
+        totalCount < MAX_ITEMS ? (
+          <div className="flex items-center gap-1 px-1">
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addItem()}
+              placeholder={t.todoAdd}
+              className="flex-1 text-[11px] bg-transparent border-b border-gray-200 dark:border-gray-700 outline-none py-0.5 text-gray-700 dark:text-gray-300 placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:border-purple-400 dark:focus:border-purple-600 transition-colors min-w-0"
+            />
+            <button
+              onClick={addItem}
+              disabled={!inputText.trim()}
+              className="p-0.5 rounded text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 disabled:opacity-30 transition-colors flex-shrink-0"
+              aria-label={t.add}
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          <div className="text-[10px] text-center text-gray-400 dark:text-gray-500 px-1">
+            {t.todoMaxReached(MAX_ITEMS)}
+          </div>
+        )
       )}
     </div>
   );

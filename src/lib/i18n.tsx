@@ -126,6 +126,15 @@ const translations = {
     customRange: '직접 설정',
     completed: '완료',
     dayOfWeekSuffix: '요일',
+    // 할일 목록 확장/축소 + 통계
+    todoExpand: '전체 보기',
+    todoCollapse: '접기',
+    todoStats: '통계',
+    todoStatWeek: '주',
+    todoStatMonth: '월',
+    todoStatCustom: '기간',
+    todoStatFrom: '시작',
+    todoStatTo: '종료',
   },
   en: {
     save: 'Save',
@@ -234,6 +243,14 @@ const translations = {
     customRange: 'Custom',
     completed: 'Done',
     dayOfWeekSuffix: '',
+    todoExpand: 'Show all',
+    todoCollapse: 'Collapse',
+    todoStats: 'Stats',
+    todoStatWeek: 'Wk',
+    todoStatMonth: 'Mo',
+    todoStatCustom: 'Range',
+    todoStatFrom: 'From',
+    todoStatTo: 'To',
   },
   ja: {
     save: '保存',
@@ -342,6 +359,14 @@ const translations = {
     customRange: 'カスタム',
     completed: '完了',
     dayOfWeekSuffix: '曜日',
+    todoExpand: '展開',
+    todoCollapse: '折りたたむ',
+    todoStats: '統計',
+    todoStatWeek: '週',
+    todoStatMonth: '月',
+    todoStatCustom: '期間',
+    todoStatFrom: '開始',
+    todoStatTo: '終了',
   },
 } as const;
 
@@ -453,6 +478,14 @@ export interface Translations {
   todoMaxReached: (n: number) => string;
   todoWeeklyTitle: string;
   todoNoData: string;
+  todoExpand: string;
+  todoCollapse: string;
+  todoStats: string;
+  todoStatWeek: string;
+  todoStatMonth: string;
+  todoStatCustom: string;
+  todoStatFrom: string;
+  todoStatTo: string;
 }
 
 interface I18nContextValue {

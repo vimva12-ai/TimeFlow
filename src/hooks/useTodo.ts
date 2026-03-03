@@ -103,6 +103,7 @@ export function useTodo(date: string) {
     onSettled: () => {
       // 주간 히스토리만 갱신 (todo 캐시는 onMutate에서 이미 최신 상태)
       queryClient.invalidateQueries({ queryKey: ['todoHistory'] });
+      queryClient.invalidateQueries({ queryKey: ['todoStats'] });
     },
   });
 

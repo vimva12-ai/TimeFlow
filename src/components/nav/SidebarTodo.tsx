@@ -35,6 +35,8 @@ export default function SidebarTodo() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
+  // Enter 저장 후 onBlur 중복 저장 방지용 플래그
+  const editSavedRef = useRef(false);
 
   // 드래그 상태
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -69,7 +71,7 @@ export default function SidebarTodo() {
     }
   }, [isLoading, remoteItems]);
 
-  // 편집 모드 진입 시 input 포커스
+  // 편집 모드 진입 시 input 포커스 + 전체 선택
   useEffect(() => {
     if (editingId && editInputRef.current) {
       editInputRef.current.focus();
@@ -131,41 +133,48 @@ export default function SidebarTodo() {
   // ─── 인라인 편집 ──────────────────────────────────────────────────────────────
 
   function startEditing(item: TodoItem) {
+    editSavedRef.current = false;
     setEditingId(item.id);
     setEditingText(item.text);
   }
 
   function saveEdit() {
-    if (!editingId) return;
+    // 이미 저장했거나 편집 중이 아니면 무시 (Enter 후 onBlur 중복 방지)
+    if (editSavedRef.current || !editingId) return;
+    editSavedRef.current = true;
+    const id = editingId;
     const trimmed = editingText.trim();
+    setEditingId(null);
+    setEditingText('');
     if (trimmed) {
       const newItems = items.map((item) =>
-        item.id === editingId ? { ...item, text: trimmed } : item
+        item.id === id ? { ...item, text: trimmed } : item
       );
       setLocalItems(newItems);
       save(newItems);
     }
-    setEditingId(null);
-    setEditingText('');
   }
 
   function cancelEdit() {
+    // ESC 취소 시 onBlur 저장을 막기 위해 플래그 설정
+    editSavedRef.current = true;
     setEditingId(null);
     setEditingText('');
   }
 
   // ─── 드래그 앤 드롭 ───────────────────────────────────────────────────────────
+  // 핵심: draggable 속성은 그립 핸들 span에만 배치.
+  // 부모 div에 draggable을 붙이면 자식 클릭 이벤트(체크박스, 텍스트 편집)가 브라우저에 의해 간섭됨.
 
-  function handleDragStart(e: React.DragEvent, id: string) {
-    // 드래그 핸들에서만 드래그 시작 허용
-    const target = e.target as Element;
-    if (!target.closest('[data-drag-handle]')) {
-      e.preventDefault();
-      return;
+  function handleDragStart(e: React.DragEvent<HTMLSpanElement>, id: string) {
+    // 드래그 고스트 이미지를 전체 행으로 설정 (그립 아이콘만 표시되는 것 방지)
+    const row = (e.currentTarget as HTMLElement).closest('[data-drag-row]') as HTMLElement | null;
+    if (row) {
+      e.dataTransfer.setDragImage(row, 20, 10);
     }
+    e.dataTransfer.effectAllowed = 'move';
     dragSourceId.current = id;
     setDraggingId(id);
-    e.dataTransfer.effectAllowed = 'move';
   }
 
   function handleDragOver(e: React.DragEvent, id: string) {
@@ -281,22 +290,22 @@ export default function SidebarTodo() {
           items.map((item) => (
             <div
               key={item.id}
-              draggable
-              onDragStart={(e) => handleDragStart(e, item.id)}
+              data-drag-row=""
               onDragOver={(e) => handleDragOver(e, item.id)}
               onDrop={(e) => handleDrop(e, item.id)}
-              onDragEnd={handleDragEnd}
               className={`flex items-start gap-1 group px-1 py-0.5 rounded transition-all duration-200 ${
                 draggingId === item.id
-                  ? 'opacity-40 scale-[0.98]'
+                  ? 'opacity-40'
                   : dragOverId === item.id
                     ? 'bg-purple-50 dark:bg-purple-900/20'
                     : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
               }`}
             >
-              {/* 드래그 핸들 */}
+              {/* 드래그 핸들 — draggable은 여기에만! 부모 div에 붙이면 자식 click 이벤트 간섭 발생 */}
               <span
-                data-drag-handle=""
+                draggable
+                onDragStart={(e) => handleDragStart(e, item.id)}
+                onDragEnd={handleDragEnd}
                 className="mt-0.5 text-gray-300 dark:text-gray-600 cursor-grab active:cursor-grabbing flex-shrink-0 select-none opacity-0 group-hover:opacity-100 transition-opacity"
                 aria-hidden="true"
               >
@@ -310,7 +319,7 @@ export default function SidebarTodo() {
                 className="mt-0.5 w-3.5 h-3.5 rounded accent-purple-500 cursor-pointer flex-shrink-0"
               />
 
-              {/* 인라인 편집 */}
+              {/* 인라인 편집: 텍스트 클릭 → input 전환, Enter/blur 저장, ESC 취소 */}
               {editingId === item.id ? (
                 <input
                   ref={editInputRef}
@@ -326,7 +335,7 @@ export default function SidebarTodo() {
                 />
               ) : (
                 <span
-                  onClick={() => !draggingId && startEditing(item)}
+                  onClick={() => startEditing(item)}
                   className={`flex-1 text-[11px] leading-tight break-words min-w-0 cursor-text select-none ${
                     item.checked
                       ? 'line-through text-gray-400 dark:text-gray-600'

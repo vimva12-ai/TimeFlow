@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { format, subDays, parseISO } from 'date-fns';
-import { db, auth } from '@/lib/firebase/client';
+import { db, auth, getAuthUser } from '@/lib/firebase/client';
 
 export interface TodoItem {
   id: string;
@@ -43,21 +43,28 @@ function writeTodoStorage(date: string, items: TodoItem[]): void {
 }
 
 // ─── Firebase 읽기/쓰기 ────────────────────────────────────────────────────────
+// auth.currentUser가 null일 수 있으므로 반드시 resolveUser()로 대기 후 사용
 
-async function fetchTodo(date: string, uid: string): Promise<TodoItem[]> {
-  const ref = doc(db, 'users', uid, 'todos', date);
+function resolveUser() {
+  if (auth.currentUser) return Promise.resolve(auth.currentUser);
+  return getAuthUser();
+}
+
+async function fetchTodo(date: string): Promise<TodoItem[]> {
+  const user = await resolveUser();
+  if (!user) return readTodoStorage(date) ?? [];
+  const ref = doc(db, 'users', user.uid, 'todos', date);
   const snap = await getDoc(ref);
-  if (!snap.exists()) {
-    // Firebase에 문서가 없으면 localStorage 캐시를 그대로 유지
-    return readTodoStorage(date) ?? [];
-  }
+  if (!snap.exists()) return readTodoStorage(date) ?? [];
   const items = (snap.data() as TodoDoc).items ?? [];
   writeTodoStorage(date, items);
   return items;
 }
 
-async function saveTodo(date: string, items: TodoItem[], uid: string): Promise<void> {
-  const ref = doc(db, 'users', uid, 'todos', date);
+async function saveTodo(date: string, items: TodoItem[]): Promise<void> {
+  const user = await resolveUser();
+  if (!user) throw new Error('Not authenticated');
+  const ref = doc(db, 'users', user.uid, 'todos', date);
   await setDoc(ref, { items, date });
 }
 
@@ -86,14 +93,14 @@ async function applyPinnedCarryOver(uid: string, date: string): Promise<void> {
 export function useTodo(date: string) {
   const queryClient = useQueryClient();
 
-  // onAuthStateChanged로 auth 상태가 확정된 뒤 Firestore 구독 시작
-  // — getAuthUser() 대신 직접 사용해 첫 이벤트 null 문제 방지
+  // onAuthStateChanged로 auth 확정 후 Firestore 실시간 구독 시작
+  // — auth.currentUser 직접 사용 금지 (페이지 로드 직후 null일 수 있음)
   useEffect(() => {
     let snapshotUnsub: (() => void) | undefined;
     let mounted = true;
 
-    const authUnsub = onAuthStateChanged(auth, async (user) => {
-      // 이전 snapshot 구독 정리 (auth 변경 시)
+    const authUnsub = onAuthStateChanged(auth, (user) => {
+      // auth 상태가 바뀔 때마다 이전 snapshot 구독 정리
       snapshotUnsub?.();
       snapshotUnsub = undefined;
 
@@ -110,16 +117,16 @@ export function useTodo(date: string) {
             const items = (snap.data() as TodoDoc).items ?? [];
             writeTodoStorage(date, items);
             queryClient.setQueryData(['todo', date], items);
-          } else {
-            // 문서 없음 → localStorage는 그대로, React Query만 빈 배열로
-            queryClient.setQueryData(['todo', date], []);
           }
+          // 문서가 없을 때는 cache를 건드리지 않음 — optimistic update 보호
         },
         (error) => {
           // Firestore 권한 에러 등 → localStorage 폴백
           console.error('[useTodo] onSnapshot error:', error.code, error.message);
           const cached = readTodoStorage(date);
-          queryClient.setQueryData(['todo', date], cached ?? []);
+          if (cached !== undefined) {
+            queryClient.setQueryData(['todo', date], cached);
+          }
         },
       );
 
@@ -139,11 +146,7 @@ export function useTodo(date: string) {
 
   const query = useQuery({
     queryKey: ['todo', date],
-    queryFn: () => {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return readTodoStorage(date) ?? [];
-      return fetchTodo(date, uid);
-    },
+    queryFn: () => fetchTodo(date),
     staleTime: 30 * 1000,
     // localStorage에 캐시가 있으면 즉시 표시 (네트워크 대기 없음)
     initialData: () => readTodoStorage(date),
@@ -152,14 +155,7 @@ export function useTodo(date: string) {
   });
 
   const mutation = useMutation({
-    mutationFn: (items: TodoItem[]) => {
-      const uid = auth.currentUser?.uid;
-      if (!uid) {
-        console.error('[useTodo] saveTodo: user not authenticated');
-        throw new Error('Not authenticated');
-      }
-      return saveTodo(date, items, uid);
-    },
+    mutationFn: (items: TodoItem[]) => saveTodo(date, items),
     onMutate: (items) => {
       // localStorage 즉시 저장 + React Query 캐시 동기 업데이트 → UI 즉시 반영
       writeTodoStorage(date, items);

@@ -9,6 +9,8 @@ npm run dev          # Start development server (Next.js 16 + Turbopack)
 npm run build        # Production build (runs tsc + next build)
 npm run typecheck    # TypeScript check without emit
 npm run perf         # Lighthouse audit (requires running dev server)
+npx vercel --prod    # Deploy to production
+npx firebase deploy --only firestore:rules  # Deploy Firestore security rules only
 ```
 
 Build must pass with zero TypeScript errors before any feature is considered complete.
@@ -60,7 +62,7 @@ users/{uid}/daily_plans/{planId}/time_slots/{slotId}/actual_logs/{logId}
 ```
 
 - **`daily_plans`** — doc ID = `{uid}_{date}` (deterministic). Created on first access with `getDoc` check first — only `setDoc` if not exists (avoids repeated writes on refetch).
-- **`todos`** — `users/{uid}/todos/{YYYY-MM-DD}`: `{ items: Array<{ id, text, checked }>, date }`. Written by `useTodo` via `setDoc` (full replace). One document per calendar day; old days are preserved for weekly report history.
+- **`todos`** — `users/{uid}/todos/{YYYY-MM-DD}`: `{ items: Array<{ id, text, checked, pinned? }>, date }`. Written by `useTodo` via `setDoc` (full replace). One document per calendar day; old days are preserved for weekly report history. `pinned: true` items are carried over to the next day (unchecked) by `applyPinnedCarryOver`.
 - **`time_slots`** — stores `uid` (for Collection Group queries) and `planId` fields.
 - **`actual_logs`** — subcollection of each slot; stores real start/end times.
 - **`templates`** — `users/{uid}/templates/{id}`: `name` string + `slots_json` array of `{ title, offsetMinutes, durationMinutes, sort_order }`.
@@ -209,7 +211,7 @@ return Math.abs(raw - nearest30) <= 5 ? nearest30 : raw;
 
 - **`SidebarPomodoro.tsx`** — compact sidebar pomodoro timer (in `src/components/nav/`). `useReducer` with a `RESTORE` action for localStorage hydration. Phases: focus(25min) → break(5min), every 4th focus becomes long-break(15min). Plays a Web Audio API beep on phase completion (`try/catch` for iOS/unsupported environments). SVG circular progress ring. Session dot indicators (4 dots; filled count = `session % 4`, shows all 4 during long-break). `SKIP` and auto `ADVANCE_PHASE` share the same reducer case via fall-through. **Fullscreen mode**: `Maximize2` button renders a `createPortal` overlay to `document.body` (z-index 100) with a 280px SVG timer; closed via `X` button, backdrop click, or `ESC` key. Shared `state`/`dispatch` means the timer keeps running across both views. **localStorage persistence** (`timeflow-pomodoro` key): `savePomodoroState()` stores `{ phase, remaining, running, session, savedAt: Date.now() }` on every state change. On mount, `loadPomodoroState()` reads the key, computes `elapsed = Date.now() - savedAt`, and subtracts it from `remaining` if the timer was running — if remaining goes ≤ 0, advances to next phase and sets `running: false`. Dispatched via `{ type: 'RESTORE', state }` in a mount-only `useEffect` (avoids SSR hydration mismatch with the default initial state).
 
-- **`SidebarTodo.tsx`** — sidebar daily todo list (in `src/components/nav/`). Reads/writes via `useTodo(date)` hook. Max 15 items. Progress bar shown when items exist. **Local-first state pattern**: `localItems: TodoItem[] | null` holds the working copy; `initializedRef` prevents re-initialization after the first Firebase load. All mutations call `setLocalItems()` synchronously first, then `save()` for Firebase persistence. `isReady = localItems !== null` guards the input. **Midnight handling**: `setTimeout` fires at local midnight to call `setDate(todayStr())` AND `queryClient.invalidateQueries(['todoHistory', 'todoStats'])`. **Expand/collapse**: `isExpanded` state toggles between `max-h-44` and `max-h-80` with internal scroll. **Achievement rate**: displayed inline next to the title (`오늘 할 일 ● 3/5 60%`) — no separate stats section. **Drag-and-drop reorder**: `draggable` is set on the grip handle `<span>` only — **never on the parent row `<div>`**, because `draggable` on a parent intercepts click events on all children (checkbox, text) and breaks them. `onDragOver`/`onDrop` go on the parent div (`data-drag-row`). `setDragImage` points to the whole row for a natural ghost image. **Inline editing**: clicking the text span enters edit mode (input replaces span). `editSavedRef` (ref, not state) prevents double-save when Enter fires `saveEdit()` and the subsequent unmount-triggered `onBlur` fires again. `cancelEdit()` also sets `editSavedRef.current = true` so ESC doesn't accidentally save via `onBlur`. **Auto-move on check**: `toggleItem` reorders the array — checked items move to the end; unchecked items move to just before the first checked item. Period stats tabs (week/month/custom) live exclusively in the Weekly Report page.
+- **`SidebarTodo.tsx`** — sidebar daily todo list (in `src/components/nav/`). Reads/writes via `useTodo(date)` hook. Max 15 items. Progress bar shown when items exist. `isReady = !isLoading` guards the input and list. **Midnight handling**: `setTimeout` fires at local midnight to call `setDate(todayStr())` AND `queryClient.invalidateQueries(['todoHistory', 'todoStats'])`. **Expand/collapse**: `isExpanded` state toggles between `max-h-44` and `max-h-80` with internal scroll. **Achievement rate**: displayed inline next to the title (`오늘 할 일 ● 3/5 60%`) — no separate stats section. **Pin button**: each row has a pin toggle (`Pin` icon from lucide-react) — blue when pinned (always visible), gray on hover when not pinned. **Drag-and-drop reorder**: `draggable` is set on the grip handle `<span>` only — **never on the parent row `<div>`**, because `draggable` on a parent intercepts click events on all children (checkbox, text) and breaks them. `onDragOver`/`onDrop` go on the parent div (`data-drag-row`). `setDragImage` points to the whole row for a natural ghost image. **Inline editing**: clicking the text span enters edit mode (input replaces span). `editSavedRef` (ref, not state) prevents double-save when Enter fires `saveEdit()` and the subsequent unmount-triggered `onBlur` fires again. `cancelEdit()` also sets `editSavedRef.current = true` so ESC doesn't accidentally save via `onBlur`. **Auto-move on check**: `toggleItem` reorders the array — checked items move to the end; unchecked items move to just before the first checked item. Period stats tabs (week/month/custom) live exclusively in the Weekly Report page.
 
 ### Dark Mode
 
@@ -225,7 +227,12 @@ Without it, `ThemeToggle` has no effect.
 - **`src/components/stats/AchievementBadges.tsx`** — badge system shown in the today page header.
 - **`useWeeklyReport`** — 7-day report, `staleTime: 5min`. `DayReport extends Stats` with `date` and `dayOfWeek`.
 - **`usePeriodStats(from, to)`** — arbitrary date range stats, `staleTime: 5min`.
-- **`useTodo(date)`** — React Query read + Firebase write for `todos/{date}`. Exposes `{ items, isLoading, save }`. **localStorage 캐시 레이어** (`timeflow-todo-{date}` 키): `initialData: () => readTodoStorage(date)` — 페이지 로드 시 Firebase 대기 없이 즉시 표시. `initialDataUpdatedAt: 0` — 항상 stale 처리 → 백그라운드 Firebase 동기화. `onMutate` (동기): `writeTodoStorage` → localStorage 즉시 저장 + `setQueryData` 동기 업데이트 → 새로고침 후에도 항목 유지. `onError`: React Query 캐시 롤백. `onSettled`: `['todoHistory']` + `['todoStats']` 모두 invalidate. `fetchTodo`도 `writeTodoStorage`로 Firebase 조회 결과를 localStorage에 반영.
+- **`useTodo(date)`** — React Query read + Firestore real-time sync for `todos/{date}`. Exposes `{ items, isLoading, save }`.
+  - **Auth rule**: Always use `resolveUser()` (not `auth.currentUser` directly) in async Firebase ops — `auth.currentUser` is `null` during the brief async session restoration on page load, causing mutations to fail silently.
+  - **Real-time sync**: `onAuthStateChanged` fires once auth is ready → sets up `onSnapshot` listener. `onSnapshot` fires on every Firestore change and updates the React Query cache directly (`setQueryData`). When `snap.exists() = false`, the cache is NOT overwritten (protects optimistic updates in flight).
+  - **localStorage cache** (`timeflow-todo-{date}` key): `initialData` for instant display, `writeTodoStorage` on every confirmed Firebase read/write.
+  - **Optimistic updates** (`onMutate`): `writeTodoStorage` + `setQueryData` synchronously → UI instant. `onError` rolls back cache. `onSettled` invalidates `['todoHistory']` + `['todoStats']`.
+  - **Pinned carryover**: `applyPinnedCarryOver(uid, date)` runs on mount (today only) — if today's doc doesn't exist, copies `pinned: true` items from yesterday with `checked: false`.
 - **`useTodoHistory()`** — fetches the past 7 days of `todos/{date}` docs in parallel; returns `DayTodoStats[]` (`{ date, total, checked, rate }`). Used by the weekly report page for the 7-day per-day bar rows.
 - **`useTodoStats(from, to)`** — arbitrary date range todo statistics (`staleTime: 5min`). Fetches each day's `todos/{date}` doc in parallel. Returns `TodoRangeStats`: `{ avgRate, totalItems, checkedItems, days, activeDays, dayStats: DayTodoStat[] }`. `DayTodoStat` has `{ date, total, checked, rate }` for mini bar chart rendering. `enabled` only when both `from`/`to` are non-empty and `from <= to`, so the hook is safe to call unconditionally — pass empty strings to disable.
 - **Weekly page todo section** (`/weekly`) — the "할 일 달성률" card has two sub-sections: (1) period tabs `week | month | custom` backed by `useTodoStats`, showing avgRate + mini bar chart; (2) a "최근 7일 상세" section backed by `useTodoHistory`, showing per-day progress bars. Period tabs default to `week`; `custom` shows date pickers. This is where the full stats UI lives — `SidebarTodo` only shows today.
@@ -238,6 +245,14 @@ Without it, `ThemeToggle` has no effect.
 Requires **Collection Group Composite Index**: collection `time_slots`, fields `status ASC, start_at ASC`.
 
 Generate VAPID keys: `npx web-push generate-vapid-keys`
+
+### Firestore Security Rules
+
+`firestore.rules` — deployed separately from Vercel via Firebase CLI:
+```
+npx firebase deploy --only firestore:rules
+```
+Current rules: authenticated users can read/write all their own subcollections (`users/{uid}/{document=**}`). This covers `todos`, `daily_plans`, `templates`, `push_subscriptions`. Rules changes take effect immediately — no Vercel redeploy needed.
 
 ### Deployment
 

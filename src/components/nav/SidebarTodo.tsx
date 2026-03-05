@@ -2,7 +2,16 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
-import { Plus, X, RotateCcw, CheckSquare, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
+import {
+  Plus,
+  X,
+  RotateCcw,
+  CheckSquare,
+  ChevronDown,
+  ChevronUp,
+  GripVertical,
+  Pin,
+} from 'lucide-react';
 import { useTodo, type TodoItem } from '@/hooks/useTodo';
 import { useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
@@ -21,12 +30,11 @@ export default function SidebarTodo() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [date, setDate] = useState(todayStr);
-  const { items: remoteItems, isLoading, save } = useTodo(date);
+  const { items, isLoading, save } = useTodo(date);
   const [inputText, setInputText] = useState('');
 
-  // 로컬 상태로 즉시 UI 업데이트 (React Query 비동기 캐시 타이밍 문제 방지)
-  const [localItems, setLocalItems] = useState<TodoItem[] | null>(null);
-  const initializedRef = useRef(false);
+  // useTodo가 onSnapshot으로 실시간 동기화를 처리하므로 localItems 레이어 불필요
+  const isReady = !isLoading;
 
   // 확장/축소 상태
   const [isExpanded, setIsExpanded] = useState(false);
@@ -56,21 +64,6 @@ export default function SidebarTodo() {
     return () => clearTimeout(timer);
   }, [date, queryClient]);
 
-  // 날짜가 바뀌면 로컬 상태 초기화
-  useEffect(() => {
-    initializedRef.current = false;
-    setLocalItems(null);
-  }, [date]);
-
-  // Firebase 데이터가 바뀌면 로컬 상태에 반영
-  useEffect(() => {
-    if (initializedRef.current) return;
-    if (!isLoading || remoteItems.length > 0) {
-      setLocalItems(remoteItems);
-      initializedRef.current = true;
-    }
-  }, [isLoading, remoteItems]);
-
   // 편집 모드 진입 시 input 포커스 + 전체 선택
   useEffect(() => {
     if (editingId && editInputRef.current) {
@@ -79,15 +72,10 @@ export default function SidebarTodo() {
     }
   }, [editingId]);
 
-  const items = localItems ?? [];
-  const isReady = localItems !== null;
-
   function addItem() {
     const text = inputText.trim();
     if (!text || items.length >= MAX_ITEMS) return;
-    const newItems = [...items, { id: generateId(), text, checked: false }];
-    setLocalItems(newItems);
-    save(newItems);
+    save([...items, { id: generateId(), text, checked: false }]);
     setInputText('');
   }
 
@@ -115,18 +103,18 @@ export default function SidebarTodo() {
         ];
       }
     }
-    setLocalItems(newItems);
     save(newItems);
+  }
+
+  function togglePin(id: string) {
+    save(items.map((item) => (item.id === id ? { ...item, pinned: !item.pinned } : item)));
   }
 
   function deleteItem(id: string) {
-    const newItems = items.filter((item) => item.id !== id);
-    setLocalItems(newItems);
-    save(newItems);
+    save(items.filter((item) => item.id !== id));
   }
 
   function resetAll() {
-    setLocalItems([]);
     save([]);
   }
 
@@ -147,11 +135,7 @@ export default function SidebarTodo() {
     setEditingId(null);
     setEditingText('');
     if (trimmed) {
-      const newItems = items.map((item) =>
-        item.id === id ? { ...item, text: trimmed } : item
-      );
-      setLocalItems(newItems);
-      save(newItems);
+      save(items.map((item) => (item.id === id ? { ...item, text: trimmed } : item)));
     }
   }
 
@@ -201,7 +185,6 @@ export default function SidebarTodo() {
     const newItems = [...items];
     const [moved] = newItems.splice(fromIdx, 1);
     newItems.splice(toIdx, 0, moved);
-    setLocalItems(newItems);
     save(newItems);
     setDraggingId(null);
     setDragOverId(null);
@@ -345,6 +328,20 @@ export default function SidebarTodo() {
                   {item.text}
                 </span>
               )}
+
+              {/* 고정 버튼 — 고정된 항목은 항상 표시, 미고정은 hover 시에만 표시 */}
+              <button
+                onClick={() => togglePin(item.id)}
+                className={`p-0.5 rounded transition-all flex-shrink-0 mt-0.5 ${
+                  item.pinned
+                    ? 'text-blue-500 dark:text-blue-400'
+                    : 'opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-500 dark:hover:text-blue-400'
+                }`}
+                aria-label={item.pinned ? t.todoUnpinItem : t.todoPinItem}
+                title={item.pinned ? t.todoUnpinItem : t.todoPinItem}
+              >
+                <Pin className="w-2.5 h-2.5" />
+              </button>
 
               <button
                 onClick={() => deleteItem(item.id)}

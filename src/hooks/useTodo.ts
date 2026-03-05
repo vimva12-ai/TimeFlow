@@ -1,13 +1,16 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { format, subDays, parseISO } from 'date-fns';
 import { db, auth, getAuthUser } from '@/lib/firebase/client';
 
 export interface TodoItem {
   id: string;
   text: string;
   checked: boolean;
+  pinned?: boolean; // true이면 다음 날 할 일 목록에 체크 해제 상태로 자동 이월
 }
 
 interface TodoDoc {
@@ -40,10 +43,6 @@ function writeTodoStorage(date: string, items: TodoItem[]): void {
 
 // ─── Firebase 읽기/쓰기 ────────────────────────────────────────────────────────
 
-/**
- * auth.currentUser가 이미 로드돼 있으면 즉시 반환 (동기, 빠름).
- * 초기 페이지 로드처럼 아직 복원 중이면 onAuthStateChanged 완료까지 대기.
- */
 function resolveUser() {
   if (auth.currentUser) return Promise.resolve(auth.currentUser);
   return getAuthUser();
@@ -56,17 +55,35 @@ async function fetchTodo(date: string): Promise<TodoItem[]> {
   const snap = await getDoc(ref);
   if (!snap.exists()) return [];
   const items = (snap.data() as TodoDoc).items ?? [];
-  // Firebase에서 불러온 최신 데이터를 localStorage에도 반영
   writeTodoStorage(date, items);
   return items;
 }
 
 async function saveTodo(date: string, items: TodoItem[]): Promise<void> {
   const user = await resolveUser();
-  // null 반환(조용한 실패) 대신 throw → onSuccess 미호출 → 캐시 오염 방지
   if (!user) throw new Error('Not authenticated');
   const ref = doc(db, 'users', user.uid, 'todos', date);
   await setDoc(ref, { items, date });
+}
+
+// ─── 고정 항목 자동 이월 ──────────────────────────────────────────────────────
+// 오늘 문서가 없을 때만 실행. 어제 pinned 항목을 체크 해제 상태로 오늘에 복사.
+async function applyPinnedCarryOver(uid: string, date: string): Promise<void> {
+  const todayRef = doc(db, 'users', uid, 'todos', date);
+  const todaySnap = await getDoc(todayRef);
+  if (todaySnap.exists()) return; // 이미 오늘 데이터가 있으면 건너뜀
+
+  const yesterday = format(subDays(parseISO(date), 1), 'yyyy-MM-dd');
+  const ySnap = await getDoc(doc(db, 'users', uid, 'todos', yesterday));
+  if (!ySnap.exists()) return;
+
+  const pinnedItems = ((ySnap.data() as TodoDoc).items ?? [])
+    .filter((i) => i.pinned)
+    .map((i) => ({ ...i, checked: false })); // 새 날엔 체크 해제 상태로
+
+  if (pinnedItems.length > 0) {
+    await setDoc(todayRef, { items: pinnedItems, date });
+  }
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -74,34 +91,61 @@ async function saveTodo(date: string, items: TodoItem[]): Promise<void> {
 export function useTodo(date: string) {
   const queryClient = useQueryClient();
 
+  // Firestore 실시간 구독 — 모든 기기에서 즉시 동기화
+  useEffect(() => {
+    let unsub: (() => void) | undefined;
+    let mounted = true;
+
+    resolveUser().then(async (user) => {
+      if (!user || !mounted) return;
+
+      // 실시간 구독 먼저 시작 (쓰기 후 snapshot이 즉시 반영됨)
+      const ref = doc(db, 'users', user.uid, 'todos', date);
+      unsub = onSnapshot(ref, (snap) => {
+        if (!mounted) return;
+        const items = snap.exists() ? (snap.data() as TodoDoc).items ?? [] : [];
+        writeTodoStorage(date, items);
+        queryClient.setQueryData(['todo', date], items);
+      });
+
+      // 오늘에 한해서만 고정 항목 이월 처리 (백그라운드, 실패 무시)
+      const today = format(new Date(), 'yyyy-MM-dd');
+      if (date === today) {
+        applyPinnedCarryOver(user.uid, date).catch(() => {});
+      }
+    });
+
+    return () => {
+      mounted = false;
+      unsub?.();
+    };
+  }, [date, queryClient]);
+
   const query = useQuery({
     queryKey: ['todo', date],
     queryFn: () => fetchTodo(date),
     staleTime: 30 * 1000,
     // localStorage에 캐시가 있으면 즉시 표시 (네트워크 대기 없음)
     initialData: () => readTodoStorage(date),
-    // initialDataUpdatedAt: 0 → 항상 stale 처리 → Firebase에서 백그라운드로 최신 데이터 동기화
+    // initialDataUpdatedAt: 0 → 항상 stale → Firebase에서 백그라운드로 최신 데이터 동기화
     initialDataUpdatedAt: 0,
   });
 
   const mutation = useMutation({
     mutationFn: (items: TodoItem[]) => saveTodo(date, items),
     onMutate: (items) => {
-      // 1) localStorage에 즉시 저장 → 새로고침 후에도 데이터 유지
+      // localStorage 즉시 저장 + React Query 캐시 동기 업데이트 → UI 즉시 반영
       writeTodoStorage(date, items);
-      // 2) React Query 캐시를 동기적으로 업데이트 → UI 즉시 반영 (loading 없음)
       const prev = queryClient.getQueryData<TodoItem[]>(['todo', date]);
       queryClient.setQueryData(['todo', date], items);
       return { prev };
     },
     onError: (_err, _items, ctx) => {
-      // Firebase 쓰기 실패 시 캐시 롤백 (localStorage는 그대로 — UI 일관성 유지)
       if (ctx?.prev !== undefined) {
         queryClient.setQueryData(['todo', date], ctx.prev);
       }
     },
     onSettled: () => {
-      // 주간 히스토리만 갱신 (todo 캐시는 onMutate에서 이미 최신 상태)
       queryClient.invalidateQueries({ queryKey: ['todoHistory'] });
       queryClient.invalidateQueries({ queryKey: ['todoStats'] });
     },

@@ -135,6 +135,8 @@ const translations = {
     todoStatCustom: '기간',
     todoStatFrom: '시작',
     todoStatTo: '종료',
+    todoPinItem: '고정 (다음 날에도 유지)',
+    todoUnpinItem: '고정 해제',
   },
   en: {
     save: 'Save',
@@ -251,6 +253,8 @@ const translations = {
     todoStatCustom: 'Range',
     todoStatFrom: 'From',
     todoStatTo: 'To',
+    todoPinItem: 'Pin (keep tomorrow)',
+    todoUnpinItem: 'Unpin',
   },
   ja: {
     save: '保存',
@@ -367,6 +371,8 @@ const translations = {
     todoStatCustom: '期間',
     todoStatFrom: '開始',
     todoStatTo: '終了',
+    todoPinItem: '固定（翌日も維持）',
+    todoUnpinItem: '固定解除',
   },
 } as const;
 
@@ -486,6 +492,8 @@ export interface Translations {
   todoStatCustom: string;
   todoStatFrom: string;
   todoStatTo: string;
+  todoPinItem: string;
+  todoUnpinItem: string;
 }
 
 interface I18nContextValue {

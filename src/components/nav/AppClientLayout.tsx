@@ -22,21 +22,6 @@ export default function AppClientLayout({ children }: { children: React.ReactNod
 
   const closeSidebar = () => setSidebarOpen(false);
 
-  const SidebarContent = () => (
-    <>
-      <DatePicker />
-      <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
-        <SidebarPomodoro />
-      </div>
-      <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
-        <SidebarTodo />
-      </div>
-      <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
-        <NavLinks />
-      </div>
-    </>
-  );
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
       <div aria-live="polite" aria-atomic="true" className="sr-only" id="status-announcer" />
@@ -67,7 +52,16 @@ export default function AppClientLayout({ children }: { children: React.ReactNod
       <div className="flex flex-1 max-w-6xl w-full mx-auto overflow-hidden">
         {/* 데스크톱 사이드바 (항상 표시) */}
         <aside className="hidden md:flex flex-col w-52 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 gap-3 overflow-y-auto">
-          <SidebarContent />
+          <DatePicker />
+          <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
+            <SidebarPomodoro />
+          </div>
+          <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
+            <SidebarTodo />
+          </div>
+          <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
+            <NavLinks />
+          </div>
         </aside>
 
         {/* 모바일 사이드바 backdrop */}
@@ -86,7 +80,16 @@ export default function AppClientLayout({ children }: { children: React.ReactNod
           }`}
           aria-hidden={!sidebarOpen}
         >
-          <SidebarContent />
+          <DatePicker />
+          <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
+            <SidebarPomodoro />
+          </div>
+          <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
+            <SidebarTodo />
+          </div>
+          <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
+            <NavLinks />
+          </div>
         </aside>
 
         {/* 메인 콘텐츠 */}

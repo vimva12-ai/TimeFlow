@@ -33,7 +33,8 @@ All internal links and redirects must use `/today`, `/weekly`, `/settings` — *
 ### Auth & Middleware
 
 - **`src/proxy.ts`** — Next.js 16 middleware entry point. Checks `__session` cookie exists on protected routes; redirects to `/login` if absent.
-- **`src/app/(app)/layout.tsx`** — Server Component; performs full cryptographic verification via `adminAuth.verifySessionCookie(session, true)`. This is the real auth enforcement.
+- **`src/app/(app)/layout.tsx`** — Server Component; performs full cryptographic verification via `adminAuth.verifySessionCookie(session, true)`. This is the real auth enforcement. Renders `AppClientLayout` as its only output after auth passes.
+- **`src/components/nav/AppClientLayout.tsx`** — Client Component that owns the entire app shell UI (header, desktop sidebar, mobile drawer, bottom nav). Separating it from `layout.tsx` allows sidebar open/close state (`useState`) while keeping auth server-only. **Do not define sub-components inside this component** — any inner component function is recreated on every render, causing React to unmount/remount its children (e.g. the pomodoro timer resets). Inline JSX directly instead.
 - **`src/lib/firebase/client.ts`** — Browser Firebase SDK: `auth`, `db`, `getAuthUser()`. Use `getAuthUser()` instead of `auth.currentUser` in hooks because `getAuthUser()` awaits auth state resolution via `onAuthStateChanged`.
 - **`src/lib/firebase/admin.ts`** — Server-only Admin SDK: `adminAuth`, `adminDb`.
 - **`src/app/api/auth/session/route.ts`** — POST: exchanges idToken for a 7-day `__session` cookie; DELETE: clears it.
@@ -317,4 +318,5 @@ This applies everywhere a date string is derived from an ISO timestamp for use i
 - Dark mode: `dark:` Tailwind prefix, toggled via `.dark` class on `<html>`, persisted to `localStorage`
 - Slot status colors: planned=blue, done=green, partial=orange, skipped=gray
 - Layout: sidebar (desktop, `w-52`) + bottom nav (mobile). Sidebar order: `DatePicker` → `SidebarPomodoro` → `SidebarTodo` → `NavLinks`. Each section separated by a border-t divider. Sidebar has `overflow-y-auto` so it scrolls if content overflows.
+- **Mobile sidebar**: hidden by default. A `Menu`/`X` toggle button (Lucide icons) in the header (left of "TimeFlow" logo, `md:hidden`) controls `sidebarOpen` state in `AppClientLayout`. The drawer slides in from the left (`transition-transform`, `translate-x-0` / `-translate-x-full`), sits above everything (`z-50`), starts at `top-10` (header height) and ends at `bottom-14` (bottom nav height). A `z-40` backdrop closes it on click. ESC key also closes it.
 - `scrollbar-hide` utility defined in `globals.css`

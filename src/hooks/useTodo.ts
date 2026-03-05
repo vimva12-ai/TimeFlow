@@ -3,8 +3,9 @@
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 import { format, subDays, parseISO } from 'date-fns';
-import { db, auth, getAuthUser } from '@/lib/firebase/client';
+import { db, auth } from '@/lib/firebase/client';
 
 export interface TodoItem {
   id: string;
@@ -43,26 +44,20 @@ function writeTodoStorage(date: string, items: TodoItem[]): void {
 
 // ─── Firebase 읽기/쓰기 ────────────────────────────────────────────────────────
 
-function resolveUser() {
-  if (auth.currentUser) return Promise.resolve(auth.currentUser);
-  return getAuthUser();
-}
-
-async function fetchTodo(date: string): Promise<TodoItem[]> {
-  const user = await resolveUser();
-  if (!user) return [];
-  const ref = doc(db, 'users', user.uid, 'todos', date);
+async function fetchTodo(date: string, uid: string): Promise<TodoItem[]> {
+  const ref = doc(db, 'users', uid, 'todos', date);
   const snap = await getDoc(ref);
-  if (!snap.exists()) return [];
+  if (!snap.exists()) {
+    // Firebase에 문서가 없으면 localStorage 캐시를 그대로 유지
+    return readTodoStorage(date) ?? [];
+  }
   const items = (snap.data() as TodoDoc).items ?? [];
   writeTodoStorage(date, items);
   return items;
 }
 
-async function saveTodo(date: string, items: TodoItem[]): Promise<void> {
-  const user = await resolveUser();
-  if (!user) throw new Error('Not authenticated');
-  const ref = doc(db, 'users', user.uid, 'todos', date);
+async function saveTodo(date: string, items: TodoItem[], uid: string): Promise<void> {
+  const ref = doc(db, 'users', uid, 'todos', date);
   await setDoc(ref, { items, date });
 }
 
@@ -70,12 +65,12 @@ async function saveTodo(date: string, items: TodoItem[]): Promise<void> {
 // 오늘 문서가 없을 때만 실행. 어제 pinned 항목을 체크 해제 상태로 오늘에 복사.
 async function applyPinnedCarryOver(uid: string, date: string): Promise<void> {
   const todayRef = doc(db, 'users', uid, 'todos', date);
-  const todaySnap = await getDoc(todayRef);
-  if (todaySnap.exists()) return; // 이미 오늘 데이터가 있으면 건너뜀
+  const todaySnap = await getDoc(todayRef).catch(() => null);
+  if (!todaySnap || todaySnap.exists()) return; // 이미 오늘 데이터가 있으면 건너뜀
 
   const yesterday = format(subDays(parseISO(date), 1), 'yyyy-MM-dd');
-  const ySnap = await getDoc(doc(db, 'users', uid, 'todos', yesterday));
-  if (!ySnap.exists()) return;
+  const ySnap = await getDoc(doc(db, 'users', uid, 'todos', yesterday)).catch(() => null);
+  if (!ySnap || !ySnap.exists()) return;
 
   const pinnedItems = ((ySnap.data() as TodoDoc).items ?? [])
     .filter((i) => i.pinned)
@@ -91,22 +86,42 @@ async function applyPinnedCarryOver(uid: string, date: string): Promise<void> {
 export function useTodo(date: string) {
   const queryClient = useQueryClient();
 
-  // Firestore 실시간 구독 — 모든 기기에서 즉시 동기화
+  // onAuthStateChanged로 auth 상태가 확정된 뒤 Firestore 구독 시작
+  // — getAuthUser() 대신 직접 사용해 첫 이벤트 null 문제 방지
   useEffect(() => {
-    let unsub: (() => void) | undefined;
+    let snapshotUnsub: (() => void) | undefined;
     let mounted = true;
 
-    resolveUser().then(async (user) => {
+    const authUnsub = onAuthStateChanged(auth, async (user) => {
+      // 이전 snapshot 구독 정리 (auth 변경 시)
+      snapshotUnsub?.();
+      snapshotUnsub = undefined;
+
       if (!user || !mounted) return;
 
-      // 실시간 구독 먼저 시작 (쓰기 후 snapshot이 즉시 반영됨)
       const ref = doc(db, 'users', user.uid, 'todos', date);
-      unsub = onSnapshot(ref, (snap) => {
-        if (!mounted) return;
-        const items = snap.exists() ? (snap.data() as TodoDoc).items ?? [] : [];
-        writeTodoStorage(date, items);
-        queryClient.setQueryData(['todo', date], items);
-      });
+
+      snapshotUnsub = onSnapshot(
+        ref,
+        (snap) => {
+          if (!mounted) return;
+          if (snap.exists()) {
+            // 문서가 있을 때만 localStorage 갱신 (없을 때 [] 덮어쓰기 방지)
+            const items = (snap.data() as TodoDoc).items ?? [];
+            writeTodoStorage(date, items);
+            queryClient.setQueryData(['todo', date], items);
+          } else {
+            // 문서 없음 → localStorage는 그대로, React Query만 빈 배열로
+            queryClient.setQueryData(['todo', date], []);
+          }
+        },
+        (error) => {
+          // Firestore 권한 에러 등 → localStorage 폴백
+          console.error('[useTodo] onSnapshot error:', error.code, error.message);
+          const cached = readTodoStorage(date);
+          queryClient.setQueryData(['todo', date], cached ?? []);
+        },
+      );
 
       // 오늘에 한해서만 고정 항목 이월 처리 (백그라운드, 실패 무시)
       const today = format(new Date(), 'yyyy-MM-dd');
@@ -117,13 +132,18 @@ export function useTodo(date: string) {
 
     return () => {
       mounted = false;
-      unsub?.();
+      authUnsub();
+      snapshotUnsub?.();
     };
   }, [date, queryClient]);
 
   const query = useQuery({
     queryKey: ['todo', date],
-    queryFn: () => fetchTodo(date),
+    queryFn: () => {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return readTodoStorage(date) ?? [];
+      return fetchTodo(date, uid);
+    },
     staleTime: 30 * 1000,
     // localStorage에 캐시가 있으면 즉시 표시 (네트워크 대기 없음)
     initialData: () => readTodoStorage(date),
@@ -132,7 +152,14 @@ export function useTodo(date: string) {
   });
 
   const mutation = useMutation({
-    mutationFn: (items: TodoItem[]) => saveTodo(date, items),
+    mutationFn: (items: TodoItem[]) => {
+      const uid = auth.currentUser?.uid;
+      if (!uid) {
+        console.error('[useTodo] saveTodo: user not authenticated');
+        throw new Error('Not authenticated');
+      }
+      return saveTodo(date, items, uid);
+    },
     onMutate: (items) => {
       // localStorage 즉시 저장 + React Query 캐시 동기 업데이트 → UI 즉시 반영
       writeTodoStorage(date, items);
@@ -140,7 +167,8 @@ export function useTodo(date: string) {
       queryClient.setQueryData(['todo', date], items);
       return { prev };
     },
-    onError: (_err, _items, ctx) => {
+    onError: (err, _items, ctx) => {
+      console.error('[useTodo] save error:', err);
       if (ctx?.prev !== undefined) {
         queryClient.setQueryData(['todo', date], ctx.prev);
       }

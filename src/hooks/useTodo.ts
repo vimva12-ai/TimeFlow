@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -92,6 +92,8 @@ async function applyPinnedCarryOver(uid: string, date: string): Promise<void> {
 
 export function useTodo(date: string) {
   const queryClient = useQueryClient();
+  // 진행 중인 뮤테이션 수를 추적 — onSnapshot이 optimistic update를 덮어쓰는 race condition 방지
+  const pendingMutations = useRef(0);
 
   // onAuthStateChanged로 auth 확정 후 Firestore 실시간 구독 시작
   // — auth.currentUser 직접 사용 금지 (페이지 로드 직후 null일 수 있음)
@@ -116,7 +118,11 @@ export function useTodo(date: string) {
             // 문서가 있을 때만 localStorage 갱신 (없을 때 [] 덮어쓰기 방지)
             const items = (snap.data() as TodoDoc).items ?? [];
             writeTodoStorage(date, items);
-            queryClient.setQueryData(['todo', date], items);
+            // 뮤테이션 진행 중에는 캐시를 갱신하지 않음
+            // — 이전 write 완료 snapshot이 현재 optimistic update를 덮어쓰는 race condition 방지
+            if (pendingMutations.current === 0) {
+              queryClient.setQueryData(['todo', date], items);
+            }
           }
           // 문서가 없을 때는 cache를 건드리지 않음 — optimistic update 보호
         },
@@ -157,6 +163,8 @@ export function useTodo(date: string) {
   const mutation = useMutation({
     mutationFn: (items: TodoItem[]) => saveTodo(date, items),
     onMutate: (items) => {
+      // 뮤테이션 시작 카운트 증가 — onSnapshot의 캐시 덮어쓰기 차단
+      pendingMutations.current++;
       // localStorage 즉시 저장 + React Query 캐시 동기 업데이트 → UI 즉시 반영
       writeTodoStorage(date, items);
       const prev = queryClient.getQueryData<TodoItem[]>(['todo', date]);
@@ -170,6 +178,8 @@ export function useTodo(date: string) {
       }
     },
     onSettled: () => {
+      // 뮤테이션 완료 카운트 감소 — 이후 onSnapshot부터 캐시 갱신 재개
+      pendingMutations.current = Math.max(0, pendingMutations.current - 1);
       queryClient.invalidateQueries({ queryKey: ['todoHistory'] });
       queryClient.invalidateQueries({ queryKey: ['todoStats'] });
     },

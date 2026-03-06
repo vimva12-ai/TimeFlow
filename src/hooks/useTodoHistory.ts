@@ -2,16 +2,12 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { format, subDays } from 'date-fns';
-import { doc, getDoc } from 'firebase/firestore';
-import { db, getAuthUser } from '@/lib/firebase/client';
-import { type TodoItem } from './useTodo';
+import { getAuthUser } from '@/lib/firebase/client';
+import { fetchDayTodoStat } from './useTodoStats';
+import { type DayTodoStat } from '@/types/stats';
 
-export interface DayTodoStats {
-  date: string;
-  total: number;
-  checked: number;
-  rate: number; // 0~100
-}
+// 외부 호환성 유지용 타입 별칭
+export type DayTodoStats = DayTodoStat;
 
 async function fetchTodoHistory(): Promise<DayTodoStats[]> {
   const user = await getAuthUser();
@@ -20,21 +16,7 @@ async function fetchTodoHistory(): Promise<DayTodoStats[]> {
   const today = new Date();
   const days = Array.from({ length: 7 }, (_, i) => format(subDays(today, 6 - i), 'yyyy-MM-dd'));
 
-  return Promise.all(
-    days.map(async (date): Promise<DayTodoStats> => {
-      try {
-        const ref = doc(db, 'users', user.uid, 'todos', date);
-        const snap = await getDoc(ref);
-        if (!snap.exists()) return { date, total: 0, checked: 0, rate: 0 };
-        const items: TodoItem[] = snap.data().items ?? [];
-        const total = items.length;
-        const checked = items.filter((i) => i.checked).length;
-        return { date, total, checked, rate: total > 0 ? Math.round((checked / total) * 100) : 0 };
-      } catch {
-        return { date, total: 0, checked: 0, rate: 0 };
-      }
-    })
-  );
+  return Promise.all(days.map((date) => fetchDayTodoStat(user.uid, date)));
 }
 
 export function useTodoHistory() {

@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { addMinutes, format, differenceInMinutes } from 'date-fns';
-import { useTimetableStore } from '@/store/timetableStore';
 import { useI18n } from '@/lib/i18n';
 
 interface AddSlotModalProps {
@@ -12,7 +11,6 @@ interface AddSlotModalProps {
   open: boolean;
   onClose: () => void;
   date: string;
-  slotCount: number;
   onCreatePlan: (start: string, end: string, title: string) => void;
   onCreateActual: (start: string, end: string, title: string) => void;
   initialHour?: number;
@@ -29,10 +27,9 @@ function hm(val: string): { h: number; m: number } {
 }
 
 export default function AddSlotModal({
-  type, open, onClose, date, slotCount, onCreatePlan, onCreateActual,
+  type, open, onClose, date, onCreatePlan, onCreateActual,
   initialHour, initialMin,
 }: AddSlotModalProps) {
-  const { startHour } = useTimetableStore();
   const { t } = useI18n();
 
   const now = new Date();
@@ -147,10 +144,6 @@ export default function AddSlotModal({
   const summaryStart = directInput
     ? directStart
     : `${String(startHourVal).padStart(2,'0')}:${String(startMin).padStart(2,'0')}`;
-
-  // suppress unused variable warning
-  void startHour;
-  void slotCount;
 
   const selectCls = 'flex-1 px-2 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none';
   const timeCls = 'flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';

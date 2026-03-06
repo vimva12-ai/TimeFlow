@@ -6,6 +6,7 @@ import clsx from 'clsx';
 import { format, parseISO, differenceInMinutes, addMinutes } from 'date-fns';
 import { CheckCircle, SkipForward, AlertCircle, Play, Pause, RotateCcw, Clock } from 'lucide-react';
 import { type TimeSlotWithLogs, type SlotStatus } from '@/types/database';
+import { type ResizeData, type ResizePreview } from '@/types/timetable';
 import { SLOT_MINUTES, slotIndex, slotSpan } from './TimeGrid';
 import { useTimetableStore } from '@/store/timetableStore';
 
@@ -59,17 +60,6 @@ interface DragData {
   originalOffsetMin: number;
 }
 
-interface ResizeData {
-  slotId: string;
-  edge: 'top' | 'bottom';
-  fixedOffsetMin: number; // minutes from startHour*60
-  date: string;
-}
-
-interface ResizePreview {
-  top: number;
-  height: number;
-}
 
 export default function ActualColumn({ slots, onStart, onComplete, onChangeStatus, onUpdateLog, onMoveSlot, onUpdateSlotTime }: ActualColumnProps) {
   const { startHour, endHour, slotHeight } = useTimetableStore();

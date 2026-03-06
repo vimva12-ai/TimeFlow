@@ -2,16 +2,14 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { format, subDays } from 'date-fns';
-import { doc, collection, getDoc, getDocs } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db, getAuthUser } from '@/lib/firebase/client';
-import { calcStats, type Stats } from '@/lib/stats';
+import { calcStats } from '@/lib/stats';
 import { type DailyPlanWithSlots } from '@/types/database';
+import { type DayReport } from '@/types/stats';
+import { fetchSlotsWithLogs } from '@/lib/firestore';
 
-export interface DayReport extends Stats {
-  date: string;
-  dayOfWeek: string;
-  totalSlots: number;
-}
+export type { DayReport };
 
 async function fetchWeeklyReport(): Promise<DayReport[]> {
   const user = await getAuthUser();
@@ -29,33 +27,8 @@ async function fetchWeeklyReport(): Promise<DayReport[]> {
         const planSnap = await getDoc(planRef);
         if (!planSnap.exists()) return null;
 
-        // orderBy 없이 조회 후 JS에서 정렬 (Firestore 복합 인덱스 불필요)
-        const slotsSnap = await getDocs(collection(planRef, 'time_slots'));
-        const slots = await Promise.all(
-          slotsSnap.docs.map(async (slotDoc) => {
-            const logsSnap = await getDocs(collection(slotDoc.ref, 'actual_logs'));
-            return {
-              ...slotDoc.data(),
-              id: slotDoc.id,
-              actual_logs: logsSnap.docs.map((d) => ({ ...d.data(), id: d.id })),
-            };
-          })
-        );
-
-        // JS에서 정렬
-        (slots as Array<{ sort_order?: number; start_at?: string; [k: string]: unknown }>).sort((a, b) => {
-          const so = (a.sort_order ?? 0) - (b.sort_order ?? 0);
-          if (so !== 0) return so;
-          return (a.start_at ?? '').localeCompare(b.start_at ?? '');
-        });
-
-        return {
-          id: planId,
-          uid,
-          date,
-          created_at: '',
-          time_slots: slots as DailyPlanWithSlots['time_slots'],
-        };
+        const slots = await fetchSlotsWithLogs(planRef);
+        return { id: planId, uid, date, created_at: '', time_slots: slots };
       } catch {
         return null;
       }

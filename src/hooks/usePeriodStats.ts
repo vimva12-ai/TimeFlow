@@ -1,19 +1,15 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { doc, collection, getDoc, getDocs } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { eachDayOfInterval, format, parseISO } from 'date-fns';
 import { db, getAuthUser } from '@/lib/firebase/client';
 import { calcStats } from '@/lib/stats';
 import { type DailyPlanWithSlots } from '@/types/database';
+import { type PeriodStats } from '@/types/stats';
+import { fetchSlotsWithLogs } from '@/lib/firestore';
 
-export interface PeriodStats {
-  avgCompletionRate: number;
-  avgFocusMinutes: number;
-  totalSlots: number;
-  doneSlots: number;
-  days: number;
-}
+export type { PeriodStats };
 
 async function fetchPeriodStats(from: string, to: string): Promise<PeriodStats> {
   const user = await getAuthUser();
@@ -30,23 +26,8 @@ async function fetchPeriodStats(from: string, to: string): Promise<PeriodStats> 
       const planSnap = await getDoc(planRef);
       if (!planSnap.exists()) return null;
 
-      // orderBy 없이 조회 후 JS 정렬 (Firestore 복합 인덱스 불필요)
-      const slotsSnap = await getDocs(collection(planRef, 'time_slots'));
-      const slots = await Promise.all(
-        slotsSnap.docs.map(async (slotDoc) => {
-          const logsSnap = await getDocs(collection(slotDoc.ref, 'actual_logs'));
-          return {
-            ...slotDoc.data(),
-            id: slotDoc.id,
-            actual_logs: logsSnap.docs.map((ld) => ({ ...ld.data(), id: ld.id })),
-          };
-        })
-      );
-      (slots as Array<{ sort_order?: number; start_at?: string; [k: string]: unknown }>).sort((a, b) => {
-        const so = (a.sort_order ?? 0) - (b.sort_order ?? 0);
-        return so !== 0 ? so : (a.start_at ?? '').localeCompare(b.start_at ?? '');
-      });
-      return { id: planId, uid, date, created_at: '', time_slots: slots as DailyPlanWithSlots['time_slots'] };
+      const slots = await fetchSlotsWithLogs(planRef);
+      return { id: planId, uid, date, created_at: '', time_slots: slots };
     })
   );
 

@@ -224,7 +224,6 @@ export default function TodayPage() {
         open={modal !== null}
         onClose={() => setModal(null)}
         date={selectedDate}
-        slotCount={plan?.time_slots.length ?? 0}
         onCreatePlan={handleCreateSlot}
         onCreateActual={handleCreateActual}
         initialHour={modal?.initialHour}

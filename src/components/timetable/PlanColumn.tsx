@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { format, parseISO, addMinutes, differenceInMinutes } from 'date-fns';
 import { useTimetableStore } from '@/store/timetableStore';
 import { type TimeSlotWithLogs } from '@/types/database';
+import { type ResizeData, type ResizePreview } from '@/types/timetable';
 import { SLOT_MINUTES, slotIndex, slotSpan } from './TimeGrid';
 
 function statusColor(status: string) {
@@ -39,17 +40,6 @@ interface DragData {
   columnRect: DOMRect;
 }
 
-interface ResizeData {
-  slotId: string;
-  edge: 'top' | 'bottom';
-  fixedOffsetMin: number; // minutes from startHour*60
-  date: string;
-}
-
-interface ResizePreview {
-  top: number;
-  height: number;
-}
 
 const LONG_PRESS_MS = 300;
 const CANCEL_MOVE_PX = 8;

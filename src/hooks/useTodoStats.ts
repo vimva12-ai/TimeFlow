@@ -3,21 +3,22 @@ import { eachDayOfInterval, format, parseISO } from 'date-fns';
 import { doc, getDoc } from 'firebase/firestore';
 import { db, getAuthUser } from '@/lib/firebase/client';
 import { type TodoItem } from './useTodo';
+import { type DayTodoStat, type TodoRangeStats } from '@/types/stats';
 
-export interface DayTodoStat {
-  date: string;
-  total: number;
-  checked: number;
-  rate: number; // 0~100
-}
+export type { DayTodoStat, TodoRangeStats };
 
-export interface TodoRangeStats {
-  avgRate: number;      // 활동일 기준 평균 달성률
-  totalItems: number;   // 기간 내 전체 항목 수 합계
-  checkedItems: number; // 기간 내 완료 항목 수 합계
-  days: number;         // 기간 내 전체 일수
-  activeDays: number;   // 할 일이 있었던 일수
-  dayStats: DayTodoStat[]; // 일별 상세 (바차트용)
+/** uid 기준 단일 날짜 todo 통계를 Firestore에서 조회 */
+export async function fetchDayTodoStat(uid: string, date: string): Promise<DayTodoStat> {
+  try {
+    const snap = await getDoc(doc(db, 'users', uid, 'todos', date));
+    if (!snap.exists()) return { date, total: 0, checked: 0, rate: 0 };
+    const items: TodoItem[] = snap.data().items ?? [];
+    const total = items.length;
+    const checked = items.filter((i) => i.checked).length;
+    return { date, total, checked, rate: total > 0 ? Math.round((checked / total) * 100) : 0 };
+  } catch {
+    return { date, total: 0, checked: 0, rate: 0 };
+  }
 }
 
 async function fetchTodoRange(from: string, to: string): Promise<TodoRangeStats> {
@@ -25,21 +26,8 @@ async function fetchTodoRange(from: string, to: string): Promise<TodoRangeStats>
   if (!user) return { avgRate: 0, totalItems: 0, checkedItems: 0, days: 0, activeDays: 0, dayStats: [] };
 
   const dayList = eachDayOfInterval({ start: parseISO(from), end: parseISO(to) });
-
   const dayStats: DayTodoStat[] = await Promise.all(
-    dayList.map(async (d) => {
-      const date = format(d, 'yyyy-MM-dd');
-      try {
-        const snap = await getDoc(doc(db, 'users', user.uid, 'todos', date));
-        if (!snap.exists()) return { date, total: 0, checked: 0, rate: 0 };
-        const items: TodoItem[] = snap.data().items ?? [];
-        const total = items.length;
-        const checked = items.filter((i) => i.checked).length;
-        return { date, total, checked, rate: total > 0 ? Math.round((checked / total) * 100) : 0 };
-      } catch {
-        return { date, total: 0, checked: 0, rate: 0 };
-      }
-    })
+    dayList.map((d) => fetchDayTodoStat(user.uid, format(d, 'yyyy-MM-dd')))
   );
 
   const active = dayStats.filter((d) => d.total > 0);

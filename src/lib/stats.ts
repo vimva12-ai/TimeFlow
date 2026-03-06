@@ -1,11 +1,8 @@
 import { differenceInMinutes, parseISO } from 'date-fns';
 import { type DailyPlanWithSlots } from '@/types/database';
+import { type Stats } from '@/types/stats';
 
-export interface Stats {
-  timePunctuality: number;
-  completionRate: number;
-  focusMinutes: number;
-}
+export type { Stats };
 
 export function calcStats(plan: DailyPlanWithSlots | null | undefined): Stats {
   if (!plan) return { timePunctuality: 0, completionRate: 0, focusMinutes: 0 };

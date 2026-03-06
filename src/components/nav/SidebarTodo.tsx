@@ -329,13 +329,13 @@ export default function SidebarTodo() {
                 </span>
               )}
 
-              {/* 고정 버튼 — 고정된 항목은 항상 표시, 미고정은 hover 시에만 표시 */}
+              {/* 고정 버튼 — 항상 표시 (touch-manipulation으로 300ms 지연 제거) */}
               <button
                 onClick={() => togglePin(item.id)}
-                className={`p-0.5 rounded transition-all flex-shrink-0 mt-0.5 ${
+                className={`p-1 -m-0.5 rounded transition-all flex-shrink-0 touch-manipulation ${
                   item.pinned
                     ? 'text-blue-500 dark:text-blue-400'
-                    : 'can-hover:opacity-0 can-hover:group-hover:opacity-100 text-gray-400 hover:text-blue-500 dark:hover:text-blue-400'
+                    : 'text-gray-300 dark:text-gray-600 hover:text-blue-500 dark:hover:text-blue-400'
                 }`}
                 aria-label={item.pinned ? t.todoUnpinItem : t.todoPinItem}
                 title={item.pinned ? t.todoUnpinItem : t.todoPinItem}
@@ -345,7 +345,7 @@ export default function SidebarTodo() {
 
               <button
                 onClick={() => deleteItem(item.id)}
-                className="can-hover:opacity-0 can-hover:group-hover:opacity-100 p-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-all flex-shrink-0 mt-0.5"
+                className="p-1 -m-0.5 rounded text-gray-300 dark:text-gray-600 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 transition-all flex-shrink-0 touch-manipulation"
                 aria-label="삭제"
               >
                 <X className="w-2.5 h-2.5" />

@@ -178,8 +178,11 @@ export function useTodo(date: string) {
       }
     },
     onSettled: () => {
-      // 뮤테이션 완료 카운트 감소 — 이후 onSnapshot부터 캐시 갱신 재개
-      pendingMutations.current = Math.max(0, pendingMutations.current - 1);
+      // 뮤테이션 완료 후 300ms 유예 — setDoc 완료 직후 도착하는 onSnapshot이
+      // old data로 캐시를 덮어쓰는 race condition 방지 (모바일 환경에서 특히 중요)
+      setTimeout(() => {
+        pendingMutations.current = Math.max(0, pendingMutations.current - 1);
+      }, 300);
       queryClient.invalidateQueries({ queryKey: ['todoHistory'] });
       queryClient.invalidateQueries({ queryKey: ['todoStats'] });
     },

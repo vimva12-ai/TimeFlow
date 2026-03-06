@@ -289,7 +289,7 @@ export default function SidebarTodo() {
                 draggable
                 onDragStart={(e) => handleDragStart(e, item.id)}
                 onDragEnd={handleDragEnd}
-                className="mt-0.5 text-gray-300 dark:text-gray-600 cursor-grab active:cursor-grabbing flex-shrink-0 select-none opacity-0 group-hover:opacity-100 transition-opacity"
+                className="mt-0.5 text-gray-300 dark:text-gray-600 cursor-grab active:cursor-grabbing flex-shrink-0 select-none can-hover:opacity-0 can-hover:group-hover:opacity-100 transition-opacity"
                 aria-hidden="true"
               >
                 <GripVertical className="w-3 h-3" />
@@ -335,7 +335,7 @@ export default function SidebarTodo() {
                 className={`p-0.5 rounded transition-all flex-shrink-0 mt-0.5 ${
                   item.pinned
                     ? 'text-blue-500 dark:text-blue-400'
-                    : 'opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-500 dark:hover:text-blue-400'
+                    : 'can-hover:opacity-0 can-hover:group-hover:opacity-100 text-gray-400 hover:text-blue-500 dark:hover:text-blue-400'
                 }`}
                 aria-label={item.pinned ? t.todoUnpinItem : t.todoPinItem}
                 title={item.pinned ? t.todoUnpinItem : t.todoPinItem}
@@ -345,7 +345,7 @@ export default function SidebarTodo() {
 
               <button
                 onClick={() => deleteItem(item.id)}
-                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-all flex-shrink-0 mt-0.5"
+                className="can-hover:opacity-0 can-hover:group-hover:opacity-100 p-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-all flex-shrink-0 mt-0.5"
                 aria-label="삭제"
               >
                 <X className="w-2.5 h-2.5" />

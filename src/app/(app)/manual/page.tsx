@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { Printer } from 'lucide-react';
 import { useI18n, type Locale } from '@/lib/i18n';
 
 // 각 섹션의 데이터 구조
@@ -18,6 +19,7 @@ interface ManualSection {
 interface ManualContent {
   pageTitle: string;
   pageDesc: string;
+  pdfButton: string;  // PDF 저장 버튼 레이블
   sections: ManualSection[];
 }
 
@@ -26,6 +28,7 @@ const MANUAL_CONTENT: Record<Locale, ManualContent> = {
   ko: {
     pageTitle: '사용자 매뉴얼',
     pageDesc: 'TimeFlow를 처음 사용하시는 분들을 위한 단계별 가이드입니다.',
+    pdfButton: 'PDF로 저장',
     sections: [
       {
         id: 'intro',
@@ -149,6 +152,7 @@ const MANUAL_CONTENT: Record<Locale, ManualContent> = {
   en: {
     pageTitle: 'User Manual',
     pageDesc: 'A step-by-step guide for getting started with TimeFlow.',
+    pdfButton: 'Save as PDF',
     sections: [
       {
         id: 'intro',
@@ -272,6 +276,7 @@ const MANUAL_CONTENT: Record<Locale, ManualContent> = {
   ja: {
     pageTitle: 'ユーザーマニュアル',
     pageDesc: 'TimeFlowをはじめて使う方のためのステップバイステップガイドです。',
+    pdfButton: 'PDFで保存',
     sections: [
       {
         id: 'intro',
@@ -418,7 +423,7 @@ function SectionCard({ section, index }: { section: ManualSection; index: number
   return (
     <div
       id={section.id}
-      className="scroll-mt-20 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4"
+      className="manual-section-card scroll-mt-20 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4"
     >
       {/* 섹션 헤더: 번호 배지 + 제목 */}
       <div className="flex items-center gap-3">
@@ -474,19 +479,41 @@ export default function ManualPage() {
   const content = MANUAL_CONTENT[locale];
 
   return (
+    <>
+      {/* 인쇄 전용 스타일: 헤더·사이드바·네비 숨기고 콘텐츠 전체 너비 확보 */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          header, aside, nav { display: none !important; }
+          main#main-content { overflow: visible !important; padding-bottom: 0 !important; }
+          body { background: white !important; }
+          .manual-section-card { page-break-inside: avoid; break-inside: avoid; }
+        }
+      ` }} />
+
     <div className="max-w-3xl mx-auto p-4 md:p-6 space-y-6">
-      {/* 페이지 헤더 */}
-      <div>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-          📖 {content.pageTitle}
-        </h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          {content.pageDesc}
-        </p>
+      {/* 페이지 헤더: 제목 + PDF 저장 버튼 */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            📖 {content.pageTitle}
+          </h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {content.pageDesc}
+          </p>
+        </div>
+        {/* PDF 저장 버튼: 인쇄 시 숨김 */}
+        <button
+          onClick={() => window.print()}
+          className="print:hidden shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 transition-colors"
+          title={content.pdfButton}
+        >
+          <Printer size={15} />
+          {content.pdfButton}
+        </button>
       </div>
 
-      {/* 빠른 이동 링크 */}
-      <div className="flex flex-wrap gap-2">
+      {/* 빠른 이동 링크: 인쇄 시 숨김 */}
+      <div className="print:hidden flex flex-wrap gap-2">
         {content.sections.map((section, index) => (
           <a
             key={section.id}
@@ -508,5 +535,6 @@ export default function ManualPage() {
         © 2026 TimeFlow · All rights reserved
       </div>
     </div>
+    </>
   );
 }

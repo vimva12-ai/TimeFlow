@@ -46,6 +46,11 @@ export default function SidebarTodo() {
   // Enter 저장 후 onBlur 중복 저장 방지용 플래그
   const editSavedRef = useRef(false);
 
+  // 삭제/초기화 확인 팝업 상태
+  const [confirmAction, setConfirmAction] = useState<
+    { type: 'reset' } | { type: 'delete'; id: string } | null
+  >(null);
+
   // 드래그 상태
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -110,12 +115,23 @@ export default function SidebarTodo() {
     save(items.map((item) => (item.id === id ? { ...item, pinned: !item.pinned } : item)));
   }
 
+  // 확인 팝업 → 예 선택 시 실제 동작 수행
+  function confirmYes() {
+    if (!confirmAction) return;
+    if (confirmAction.type === 'reset') {
+      save([]);
+    } else if (confirmAction.type === 'delete') {
+      save(items.filter((item) => item.id !== confirmAction.id));
+    }
+    setConfirmAction(null);
+  }
+
   function deleteItem(id: string) {
-    save(items.filter((item) => item.id !== id));
+    setConfirmAction({ type: 'delete', id });
   }
 
   function resetAll() {
-    save([]);
+    setConfirmAction({ type: 'reset' });
   }
 
   // ─── 인라인 편집 ──────────────────────────────────────────────────────────────
@@ -334,8 +350,8 @@ export default function SidebarTodo() {
                 onClick={() => togglePin(item.id)}
                 className={`p-1 -m-0.5 rounded transition-all flex-shrink-0 touch-manipulation ${
                   item.pinned
-                    ? 'text-blue-500 dark:text-blue-400'
-                    : 'text-gray-300 dark:text-gray-600 hover:text-blue-500 dark:hover:text-blue-400'
+                    ? 'text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300'
+                    : 'text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400'
                 }`}
                 aria-label={item.pinned ? t.todoUnpinItem : t.todoPinItem}
                 title={item.pinned ? t.todoUnpinItem : t.todoPinItem}
@@ -381,6 +397,29 @@ export default function SidebarTodo() {
             {t.todoMaxReached(MAX_ITEMS)}
           </div>
         ))}
+
+      {/* 삭제/초기화 확인 팝업 */}
+      {confirmAction && (
+        <div className="mt-1 mx-1 p-2 rounded-lg bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 shadow-sm">
+          <p className="text-[11px] text-gray-700 dark:text-gray-300 mb-2 leading-tight">
+            {confirmAction.type === 'reset' ? t.todoConfirmReset : t.todoConfirmDeleteItem}
+          </p>
+          <div className="flex items-center justify-end gap-1.5">
+            <button
+              onClick={() => setConfirmAction(null)}
+              className="px-2 py-0.5 text-[10px] rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors touch-manipulation"
+            >
+              {t.no}
+            </button>
+            <button
+              onClick={confirmYes}
+              className="px-2 py-0.5 text-[10px] rounded bg-red-500 text-white hover:bg-red-600 transition-colors touch-manipulation"
+            >
+              {t.yes}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

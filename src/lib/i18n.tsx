@@ -137,6 +137,8 @@ const translations = {
     todoStatTo: '종료',
     todoPinItem: '고정 (다음 날에도 유지)',
     todoUnpinItem: '고정 해제',
+    todoConfirmDeleteItem: '이 할 일을 삭제할까요?',
+    todoConfirmReset: '오늘 할 일 목록을 모두 초기화할까요?',
   },
   en: {
     save: 'Save',
@@ -255,6 +257,8 @@ const translations = {
     todoStatTo: 'To',
     todoPinItem: 'Pin (keep tomorrow)',
     todoUnpinItem: 'Unpin',
+    todoConfirmDeleteItem: 'Delete this task?',
+    todoConfirmReset: 'Reset all tasks for today?',
   },
   ja: {
     save: '保存',
@@ -373,6 +377,8 @@ const translations = {
     todoStatTo: '終了',
     todoPinItem: '固定（翌日も維持）',
     todoUnpinItem: '固定解除',
+    todoConfirmDeleteItem: 'このタスクを削除しますか？',
+    todoConfirmReset: '今日のタスクをすべてリセットしますか？',
   },
 } as const;
 
@@ -494,6 +500,8 @@ export interface Translations {
   todoStatTo: string;
   todoPinItem: string;
   todoUnpinItem: string;
+  todoConfirmDeleteItem: string;
+  todoConfirmReset: string;
 }
 
 interface I18nContextValue {

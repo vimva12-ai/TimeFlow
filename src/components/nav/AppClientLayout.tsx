@@ -1,7 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, LogOut } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { signOut } from 'firebase/auth';
+import { auth } from '@/lib/firebase/client';
 import DatePicker from '@/components/nav/DatePicker';
 import ThemeToggle from '@/components/ThemeToggle';
 import LanguageSelector from '@/components/LanguageSelector';
@@ -11,6 +14,14 @@ import SidebarTodo from '@/components/nav/SidebarTodo';
 
 export default function AppClientLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const router = useRouter();
+
+  // Firebase 로그아웃 + 세션 쿠키 삭제 후 로그인 페이지로 이동
+  async function handleLogout() {
+    await fetch('/api/auth/session', { method: 'DELETE' });
+    await signOut(auth);
+    router.push('/login');
+  }
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -43,6 +54,15 @@ export default function AppClientLayout({ children }: { children: React.ReactNod
           </div>
           <div className="flex items-center gap-2">
             <div id="achievement-badges-portal" />
+            {/* 로그아웃 버튼 */}
+            <button
+              onClick={handleLogout}
+              className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              aria-label="로그아웃"
+              title="로그아웃"
+            >
+              <LogOut size={16} />
+            </button>
             <LanguageSelector />
             <ThemeToggle />
           </div>

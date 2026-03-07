@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Menu, X, LogOut } from 'lucide-react';
+import { Menu, X, LogOut, BookOpen } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase/client';
 import DatePicker from '@/components/nav/DatePicker';
@@ -54,6 +55,16 @@ export default function AppClientLayout({ children }: { children: React.ReactNod
           </div>
           <div className="flex items-center gap-2">
             <div id="achievement-badges-portal" />
+            {/* TF Guide 버튼: /manual 페이지로 이동 */}
+            <Link
+              href="/manual"
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 border border-blue-200 dark:border-blue-800 transition-colors"
+              aria-label="사용자 매뉴얼"
+              title="사용자 매뉴얼"
+            >
+              <BookOpen size={13} />
+              <span>TF Guide</span>
+            </Link>
             {/* 로그아웃 버튼 */}
             <button
               onClick={handleLogout}

@@ -17,6 +17,7 @@ const translations = {
     weekly: '주간',
     settings: '설정',
     weeklyReport: '주간 리포트',
+    manual: '매뉴얼',
     // 타임테이블
     plan: 'PLAN',
     actual: 'ACTUAL',
@@ -150,6 +151,7 @@ const translations = {
     weekly: 'Weekly',
     settings: 'Settings',
     weeklyReport: 'Weekly Report',
+    manual: 'Manual',
     plan: 'PLAN',
     actual: 'ACTUAL',
     add: 'Add',
@@ -270,6 +272,7 @@ const translations = {
     weekly: '週間',
     settings: '設定',
     weeklyReport: '週間レポート',
+    manual: 'マニュアル',
     plan: 'PLAN',
     actual: 'ACTUAL',
     add: '追加',
@@ -393,6 +396,7 @@ export interface Translations {
   weekly: string;
   settings: string;
   weeklyReport: string;
+  manual: string;
   plan: string;
   actual: string;
   add: string;

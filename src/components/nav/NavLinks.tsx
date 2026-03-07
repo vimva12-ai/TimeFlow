@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { CalendarDays, BarChart2, Settings } from 'lucide-react';
+import { CalendarDays, BarChart2, Settings, BookOpen } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 
 export default function NavLinks() {
@@ -16,6 +16,9 @@ export default function NavLinks() {
       </Link>
       <Link href="/settings" className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
         <Settings className="w-4 h-4 shrink-0" />{t.settings}
+      </Link>
+      <Link href="/manual" className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+        <BookOpen className="w-4 h-4 shrink-0" />{t.manual}
       </Link>
     </nav>
   );
@@ -33,6 +36,9 @@ export function BottomNav() {
       </Link>
       <Link href="/settings" className="flex flex-col items-center gap-0.5 text-xs text-gray-600 dark:text-gray-400 hover:text-blue-600">
         <Settings className="w-5 h-5" />{t.settings}
+      </Link>
+      <Link href="/manual" className="flex flex-col items-center gap-0.5 text-xs text-gray-600 dark:text-gray-400 hover:text-blue-600">
+        <BookOpen className="w-5 h-5" />{t.manual}
       </Link>
     </div>
   );

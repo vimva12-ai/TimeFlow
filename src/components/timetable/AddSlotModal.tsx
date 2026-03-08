@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { addMinutes, format, differenceInMinutes } from 'date-fns';
 import { useI18n } from '@/lib/i18n';
+import { useSlotTitleHistory } from '@/hooks/useSlotTitleHistory';
 
 interface AddSlotModalProps {
   type: 'plan' | 'actual';
@@ -31,6 +32,7 @@ export default function AddSlotModal({
   initialHour, initialMin,
 }: AddSlotModalProps) {
   const { t } = useI18n();
+  const { addTitle, getSuggestions } = useSlotTitleHistory();
 
   const now = new Date();
   const [title, setTitle] = useState('');
@@ -43,11 +45,20 @@ export default function AddSlotModal({
   const [directStart, setDirectStart] = useState('');
   const [directEnd, setDirectEnd] = useState('');
 
+  // 자동완성 드롭다운 상태
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [activeIdx, setActiveIdx] = useState(-1);
+  const titleWrapRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (open) {
       const h = initialHour ?? new Date().getHours();
       const m = initialMin ?? (new Date().getMinutes() < 30 ? 0 : 30);
       setTitle('');
+      setShowSuggestions(false);
+      setSuggestions([]);
+      setActiveIdx(-1);
       setDirectInput(false);
       setStartHourVal(h);
       setStartMin(m);
@@ -90,6 +101,47 @@ export default function AddSlotModal({
     setDirectInput((v) => !v);
   }
 
+  /** 제목 input 변경 시 자동완성 목록 갱신 */
+  function handleTitleChange(val: string) {
+    setTitle(val);
+    setActiveIdx(-1);
+    const results = getSuggestions(val);
+    setSuggestions(results);
+    setShowSuggestions(results.length > 0);
+  }
+
+  /** 자동완성 항목 선택 */
+  function selectSuggestion(value: string) {
+    setTitle(value);
+    setShowSuggestions(false);
+    setActiveIdx(-1);
+  }
+
+  /** 키보드 탐색 (↑↓ Enter Escape) */
+  function handleTitleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+      if (showSuggestions && activeIdx >= 0) {
+        e.preventDefault();
+        selectSuggestion(suggestions[activeIdx]);
+        return;
+      }
+      setShowSuggestions(false);
+      handleSubmit();
+      return;
+    }
+    if (!showSuggestions) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIdx((i) => Math.min(i + 1, suggestions.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIdx((i) => Math.max(i - 1, -1));
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+      setActiveIdx(-1);
+    }
+  }
+
   function handleSubmit() {
     if (!title.trim()) return;
     let start: string, end: string;
@@ -108,6 +160,8 @@ export default function AddSlotModal({
       end = toIso(date, endHourVal, endMin);
       if (end <= start) return;
     }
+    // 제출 시 제목 히스토리에 저장
+    addTitle(title.trim());
     if (type === 'plan') onCreatePlan(start, end, title.trim());
     else onCreateActual(start, end, title.trim());
     onClose();
@@ -181,19 +235,54 @@ export default function AddSlotModal({
           </div>
 
           <div className="space-y-3">
-            {/* 제목 */}
+            {/* 제목 + 자동완성 드롭다운 */}
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                 {isPlan ? t.taskLabel : t.activityLabel}
               </label>
-              <input
-                autoFocus
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && handleSubmit()}
-                placeholder={isPlan ? t.taskPlaceholder : t.activityPlaceholder}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <div ref={titleWrapRef} className="relative">
+                <input
+                  autoFocus
+                  value={title}
+                  onChange={(e) => handleTitleChange(e.target.value)}
+                  onFocus={() => {
+                    const results = getSuggestions(title);
+                    setSuggestions(results);
+                    setShowSuggestions(results.length > 0);
+                  }}
+                  onBlur={(e) => {
+                    // 드롭다운 항목 클릭 시 blur가 먼저 발생하므로 delay
+                    if (!titleWrapRef.current?.contains(e.relatedTarget as Node)) {
+                      setShowSuggestions(false);
+                    }
+                  }}
+                  onKeyDown={handleTitleKeyDown}
+                  placeholder={isPlan ? t.taskPlaceholder : t.activityPlaceholder}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {/* 자동완성 드롭다운 */}
+                {showSuggestions && (
+                  <ul className="absolute z-10 left-0 right-0 top-full mt-1 max-h-48 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+                    {suggestions.slice(0, 8).map((s, i) => (
+                      <li
+                        key={s}
+                        onMouseDown={(e) => {
+                          // blur 전에 선택되도록 mousedown에서 처리
+                          e.preventDefault();
+                          selectSuggestion(s);
+                        }}
+                        className={`px-3 py-2 text-sm cursor-pointer truncate ${
+                          i === activeIdx
+                            ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+                            : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
 
             {directInput ? (

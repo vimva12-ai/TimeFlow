@@ -326,7 +326,8 @@ export default function SidebarTodo() {
                   value={editingText}
                   onChange={(e) => setEditingText(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') saveEdit();
+                    // Safari IME 조합 중 Enter 무시 (한국어 마지막 음절 중복 방지)
+                    if (e.key === 'Enter' && !e.nativeEvent.isComposing) saveEdit();
                     if (e.key === 'Escape') cancelEdit();
                   }}
                   onBlur={saveEdit}
@@ -379,7 +380,7 @@ export default function SidebarTodo() {
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addItem()}
+              onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && addItem()}
               placeholder={t.todoAdd}
               className="flex-1 text-[11px] bg-transparent border-b border-gray-200 dark:border-gray-700 outline-none py-0.5 text-gray-700 dark:text-gray-300 placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:border-purple-400 dark:focus:border-purple-600 transition-colors min-w-0"
             />

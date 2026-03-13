@@ -240,11 +240,11 @@ export default function SidebarTodo() {
   return (
     <div className="flex flex-col gap-1.5">
       {/* 헤더 — 제목 + 달성률 인라인 표시 */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+      <div className="flex items-center justify-between gap-2 px-1">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
           <CheckSquare className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
           {/* 오늘이면 '오늘 할 일', 다른 날짜면 날짜 표시 */}
-          <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">
+          <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide truncate">
             {isToday ? t.todayTodo : selectedDate}
           </span>
           {/* 달성률: 오늘 할 일 ● 3/5 60% */}

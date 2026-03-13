@@ -13,7 +13,9 @@ export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
-  // 이미 동의한 사용자 여부 (localStorage 확인)
+  // SSR hydration 안전 패턴: localStorage는 서버에서 접근 불가
+  // mounted 전까지는 terms 섹션을 렌더하지 않아 hydration mismatch 방지
+  const [mounted, setMounted] = useState(false);
   const [alreadyAgreed, setAlreadyAgreed] = useState(false);
   // 신규 사용자용 약관 동의 체크박스 상태
   const [agreedPrivacy, setAgreedPrivacy] = useState(false);
@@ -21,11 +23,13 @@ export default function LoginPage() {
 
   // 클라이언트 사이드에서만 localStorage 접근
   useEffect(() => {
+    setMounted(true);
     setAlreadyAgreed(localStorage.getItem(TERMS_KEY) === 'true');
   }, []);
 
-  // 이미 동의했거나 두 체크박스 모두 체크하면 로그인 버튼 활성화
-  const canLogin = alreadyAgreed || (agreedPrivacy && agreedTerms);
+  // mounted 전에는 로그인 비활성 (hydration 안정화 대기)
+  // mounted 후: 이미 동의했거나 두 체크박스 모두 체크하면 활성화
+  const canLogin = mounted && (alreadyAgreed || (agreedPrivacy && agreedTerms));
 
   async function handleGoogleLogin() {
     if (!canLogin) return;
@@ -58,8 +62,11 @@ export default function LoginPage() {
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Plan vs Actual 타임 트래커</p>
         </div>
 
-        {/* 약관 동의 섹션: 이미 동의한 사용자는 간소화 표시 */}
-        {alreadyAgreed ? (
+        {/* 약관 동의 섹션: mounted 전 placeholder → 이미 동의한 사용자는 간소화 표시 */}
+        {!mounted ? (
+          // SSR/하이드레이션 중 레이아웃 변이 방지용 placeholder
+          <div className="h-[52px] rounded-lg bg-gray-100 dark:bg-gray-800 animate-pulse" />
+        ) : alreadyAgreed ? (
           <div className="flex items-center justify-between px-1 py-2 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
             <div className="flex items-center gap-2">
               <svg className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">

@@ -83,8 +83,10 @@ export default function TimeGrid({
 
   const [offset, setOffset] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
-  // PLAN 컬럼에 드래그 중인지 표시 (시각적 피드백)
+  // PLAN 컬럼 드래그 오버 상태 + counter
+  // counter 방식: Safari에서 onDragLeave가 자식 요소 경계에서도 발화하는 문제 해결
   const [planDragOver, setPlanDragOver] = useState(false);
+  const planDragCountRef = useRef(0);
 
   useEffect(() => {
     const calc = () => {
@@ -190,21 +192,34 @@ export default function TimeGrid({
             const t = getTimeFromClick(e, startHour, slotHeight, totalSlots);
             if (t) onPlanCellClick(t.h, t.m);
           }}
-          onDragOver={(e) => {
+          onDragEnter={(e) => {
+            // Safari/Firefox/Chrome 공통: counter 방식으로 자식 요소 진입 시 깜빡임 방지
             const types = Array.from(e.dataTransfer.types);
             if (types.includes('text/x-todo-title') || types.includes('text/x-favorite')) {
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'copy';
+              planDragCountRef.current += 1;
               setPlanDragOver(true);
             }
           }}
-          onDragLeave={(e) => {
-            // 자식 요소로 이동할 때는 무시 (currentTarget 벗어날 때만 처리)
-            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          onDragOver={(e) => {
+            const types = Array.from(e.dataTransfer.types);
+            if (types.includes('text/x-todo-title') || types.includes('text/x-favorite')) {
+              // preventDefault 없이는 drop 이벤트가 발화하지 않음
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'copy';
+            }
+          }}
+          onDragLeave={() => {
+            // counter 감소: 0 이하가 될 때만 하이라이트 제거
+            // relatedTarget 사용 금지 — Safari에서 null이 되거나 부정확하게 동작
+            planDragCountRef.current -= 1;
+            if (planDragCountRef.current <= 0) {
+              planDragCountRef.current = 0;
               setPlanDragOver(false);
             }
           }}
           onDrop={(e) => {
+            // 드롭 완료: counter 초기화
+            planDragCountRef.current = 0;
             setPlanDragOver(false);
             const rect = e.currentTarget.getBoundingClientRect();
             const relY = e.clientY - rect.top;

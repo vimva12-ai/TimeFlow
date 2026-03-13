@@ -15,6 +15,7 @@ import {
 import { useTodo, type TodoItem } from '@/hooks/useTodo';
 import { useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
+import { useTimetableStore } from '@/store/timetableStore';
 
 const MAX_ITEMS = 15;
 
@@ -29,8 +30,14 @@ function generateId() {
 export default function SidebarTodo() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
-  const [date, setDate] = useState(todayStr);
-  const { items, isLoading, save } = useTodo(date);
+  // 선택된 날짜를 Zustand 스토어에서 가져와 해당 날짜의 할 일 표시
+  const { selectedDate, setSelectedDate } = useTimetableStore();
+  const { items, isLoading, save } = useTodo(selectedDate);
+
+  // 오늘/과거 날짜 여부
+  const todayString = todayStr();
+  const isToday = selectedDate === todayString;
+  const isPastDate = selectedDate < todayString;
   const [inputText, setInputText] = useState('');
 
   // useTodo가 onSnapshot으로 실시간 동기화를 처리하므로 localItems 레이어 불필요
@@ -56,18 +63,25 @@ export default function SidebarTodo() {
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const dragSourceId = useRef<string | null>(null);
 
-  // 자정에 날짜 갱신 → 새 날짜로 todos 로드 + 통계 캐시 무효화
+  // 자정에 날짜 갱신 → 오늘 날짜를 보고 있었다면 내일로 이동 + 통계 캐시 무효화
   useEffect(() => {
     const now = new Date();
     const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     const ms = midnight.getTime() - now.getTime();
     const timer = setTimeout(() => {
-      setDate(todayStr());
+      const newToday = todayStr();
+      // 자정 직전의 날짜(= 어제)를 보고 있었다면 오늘로 자동 이동
+      const yesterday = format(new Date(Date.now() - 1000), 'yyyy-MM-dd');
+      if (selectedDate === yesterday) {
+        setSelectedDate(newToday);
+      }
       queryClient.invalidateQueries({ queryKey: ['todoHistory'] });
       queryClient.invalidateQueries({ queryKey: ['todoStats'] });
     }, ms);
     return () => clearTimeout(timer);
-  }, [date, queryClient]);
+  // selectedDate 변경 시 타이머 재설정 (cleanup으로 이전 타이머 제거됨)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate]);
 
   // 편집 모드 진입 시 input 포커스 + 전체 선택
   useEffect(() => {
@@ -172,9 +186,15 @@ export default function SidebarTodo() {
     if (row) {
       e.dataTransfer.setDragImage(row, 20, 10);
     }
-    e.dataTransfer.effectAllowed = 'move';
+    // copyMove: 사이드바 내부 → 순서 변경 / PLAN 컬럼에 드롭 → 슬롯 생성
+    e.dataTransfer.effectAllowed = 'copyMove';
     dragSourceId.current = id;
     setDraggingId(id);
+    // PLAN 컬럼에서 드롭 감지할 수 있도록 할 일 제목 데이터 설정
+    const item = items.find((i) => i.id === id);
+    if (item) {
+      e.dataTransfer.setData('text/x-todo-title', item.text);
+    }
   }
 
   function handleDragOver(e: React.DragEvent, id: string) {
@@ -223,8 +243,9 @@ export default function SidebarTodo() {
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           <CheckSquare className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
+          {/* 오늘이면 '오늘 할 일', 다른 날짜면 날짜 표시 */}
           <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">
-            {t.todayTodo}
+            {isToday ? t.todayTodo : selectedDate}
           </span>
           {/* 달성률: 오늘 할 일 ● 3/5 60% */}
           {isReady && totalCount > 0 && (
@@ -343,6 +364,12 @@ export default function SidebarTodo() {
                   }`}
                 >
                   {item.text}
+                </span>
+              )}
+              {/* 미달성 배지: 과거 날짜이고 미완료인 항목에만 표시 */}
+              {isPastDate && !item.checked && (
+                <span className="text-[8px] font-semibold text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-1 py-0.5 rounded flex-shrink-0 whitespace-nowrap">
+                  {t.todoMissed}
                 </span>
               )}
 

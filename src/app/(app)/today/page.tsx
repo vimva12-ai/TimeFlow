@@ -5,12 +5,14 @@ import { useTimetableStore } from '@/store/timetableStore';
 import { useDailyPlan } from '@/hooks/useDailyPlan';
 import { useSlotMutations } from '@/hooks/useSlotMutations';
 import { useWeeklyReport } from '@/hooks/useWeeklyReport';
+import { usePlanFavorites } from '@/hooks/usePlanFavorites';
 import { useQueryClient } from '@tanstack/react-query';
-import { format, addDays, parseISO } from 'date-fns';
+import { format, addDays, addMinutes, parseISO } from 'date-fns';
 import AchievementBadges from '@/components/stats/AchievementBadges';
 import TimeGrid from '@/components/timetable/TimeGrid';
 import PlanColumn from '@/components/timetable/PlanColumn';
 import ActualColumn from '@/components/timetable/ActualColumn';
+import FavoritesPanel from '@/components/timetable/FavoritesPanel';
 import SlotEditModal from '@/components/timetable/SlotEditModal';
 import AddSlotModal from '@/components/timetable/AddSlotModal';
 import { calcStats } from '@/lib/stats';
@@ -36,12 +38,15 @@ export default function TodayPage() {
   const { data: plan, isLoading } = useDailyPlan(selectedDate);
   const { createSlot, updateSlotStatus, logActual, createActualEntry, updateActualLog, updateSlotTime, updateActualDispTime } = useSlotMutations(selectedDate);
   const { data: weeklyReport } = useWeeklyReport();
+  const { addFavorite } = usePlanFavorites();
   const queryClient = useQueryClient();
   const stats = calcStats(plan);
   const { t } = useI18n();
 
   const [statsOpen, setStatsOpen] = useState(false);
   const [modal, setModal] = useState<ModalState | null>(null);
+  // 즐겨찾기 패널 표시 여부
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
 
   const weeklyAvg = weeklyReport
     ? Math.round(weeklyReport.reduce((a, d) => a + d.completionRate, 0) / weeklyReport.length)
@@ -96,6 +101,26 @@ export default function TodayPage() {
     );
     queryClient.invalidateQueries({ queryKey: ['dailyPlan', tomorrow] });
     alert(t.carryOverDone(carry.length));
+  }
+
+  /** 사이드바 할 일 → PLAN 드롭: 해당 시간에 1시간짜리 슬롯 생성 */
+  function handleTodoDrop(h: number, m: number, title: string) {
+    if (!plan) return;
+    const start = new Date(
+      `${selectedDate}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`,
+    ).toISOString();
+    const end = addMinutes(new Date(start), 60).toISOString();
+    createSlot.mutate({ title, start_at: start, end_at: end, status: 'planned', sort_order: plan.time_slots.length });
+  }
+
+  /** 즐겨찾기 → PLAN 드롭: 즐겨찾기의 지속 시간으로 슬롯 생성 */
+  function handleFavoriteDrop(h: number, m: number, title: string, durationMin: number) {
+    if (!plan) return;
+    const start = new Date(
+      `${selectedDate}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`,
+    ).toISOString();
+    const end = addMinutes(new Date(start), durationMin).toISOString();
+    createSlot.mutate({ title, start_at: start, end_at: end, status: 'planned', sort_order: plan.time_slots.length });
   }
 
   const total = plan?.time_slots.length ?? 0;
@@ -165,6 +190,11 @@ export default function TodayPage() {
         onAddActual={() => setModal({ type: 'actual' })}
         onPlanCellClick={(h, m) => setModal({ type: 'plan', initialHour: h, initialMin: m })}
         onActualCellClick={(h, m) => setModal({ type: 'actual', initialHour: h, initialMin: m })}
+        favoritesOpen={favoritesOpen}
+        onToggleFavorites={() => setFavoritesOpen((v) => !v)}
+        favoritesPanel={<FavoritesPanel />}
+        onTodoDrop={handleTodoDrop}
+        onFavoriteDrop={handleFavoriteDrop}
         planColumn={
           plan ? (
             <PlanColumn
@@ -228,6 +258,9 @@ export default function TodayPage() {
         onCreateActual={handleCreateActual}
         initialHour={modal?.initialHour}
         initialMin={modal?.initialMin}
+        onSaveFavorite={(title, durationMinutes) =>
+          addFavorite.mutate({ title, durationMinutes })
+        }
       />
     </div>
   );

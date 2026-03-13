@@ -12,6 +12,7 @@ import LanguageSelector from '@/components/LanguageSelector';
 import NavLinks, { BottomNav } from '@/components/nav/NavLinks';
 import SidebarPomodoro from '@/components/nav/SidebarPomodoro';
 import SidebarTodo from '@/components/nav/SidebarTodo';
+import SidebarMemo from '@/components/nav/SidebarMemo';
 
 export default function AppClientLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -91,6 +92,9 @@ export default function AppClientLayout({ children }: { children: React.ReactNod
             <SidebarTodo />
           </div>
           <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
+            <SidebarMemo />
+          </div>
+          <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
             <NavLinks />
           </div>
         </aside>
@@ -117,6 +121,9 @@ export default function AppClientLayout({ children }: { children: React.ReactNod
           </div>
           <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
             <SidebarTodo />
+          </div>
+          <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
+            <SidebarMemo />
           </div>
           <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
             <NavLinks />

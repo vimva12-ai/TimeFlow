@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X } from 'lucide-react';
+import { X, Star } from 'lucide-react';
 import { addMinutes, format, differenceInMinutes } from 'date-fns';
 import { useI18n } from '@/lib/i18n';
 import { useSlotTitleHistory } from '@/hooks/useSlotTitleHistory';
@@ -16,6 +16,8 @@ interface AddSlotModalProps {
   onCreateActual: (start: string, end: string, title: string) => void;
   initialHour?: number;
   initialMin?: number;
+  // PLAN 즐겨찾기 저장 콜백 (PLAN 타입에서만 표시)
+  onSaveFavorite?: (title: string, durationMinutes: number) => void;
 }
 
 function toIso(date: string, hour: number, minute: number): string {
@@ -29,10 +31,10 @@ function hm(val: string): { h: number; m: number } {
 
 export default function AddSlotModal({
   type, open, onClose, date, onCreatePlan, onCreateActual,
-  initialHour, initialMin,
+  initialHour, initialMin, onSaveFavorite,
 }: AddSlotModalProps) {
   const { t } = useI18n();
-  const { addTitle, getSuggestions } = useSlotTitleHistory();
+  const { addTitle, getSuggestions, removeTitle } = useSlotTitleHistory();
 
   const now = new Date();
   const [title, setTitle] = useState('');
@@ -266,18 +268,41 @@ export default function AddSlotModal({
                     {suggestions.slice(0, 8).map((s, i) => (
                       <li
                         key={s}
-                        onMouseDown={(e) => {
-                          // blur 전에 선택되도록 mousedown에서 처리
-                          e.preventDefault();
-                          selectSuggestion(s);
-                        }}
-                        className={`px-3 py-2 text-sm cursor-pointer truncate ${
+                        className={`flex items-center group ${
                           i === activeIdx
-                            ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
-                            : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            ? 'bg-blue-50 dark:bg-blue-900/40'
+                            : 'hover:bg-gray-100 dark:hover:bg-gray-700'
                         }`}
                       >
-                        {s}
+                        <span
+                          onMouseDown={(e) => {
+                            // blur 전에 선택되도록 mousedown에서 처리
+                            e.preventDefault();
+                            selectSuggestion(s);
+                          }}
+                          className={`flex-1 px-3 py-2 text-sm cursor-pointer truncate ${
+                            i === activeIdx
+                              ? 'text-blue-700 dark:text-blue-300'
+                              : 'text-gray-800 dark:text-gray-200'
+                          }`}
+                        >
+                          {s}
+                        </span>
+                        {/* 히스토리에서 항목 삭제 */}
+                        <button
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            removeTitle(s);
+                            const updated = getSuggestions(title);
+                            setSuggestions(updated);
+                            if (updated.length === 0) setShowSuggestions(false);
+                          }}
+                          className="px-2 py-2 text-gray-300 dark:text-gray-600 hover:text-red-500 can-hover:opacity-0 can-hover:group-hover:opacity-100 transition-opacity flex-shrink-0"
+                          aria-label="목록에서 제거"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -386,13 +411,29 @@ export default function AddSlotModal({
               </p>
             )}
 
-            <button
-              onClick={handleSubmit}
-              disabled={!title.trim() || totalMin <= 0}
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white text-sm font-semibold rounded-lg transition-colors"
-            >
-              {isPlan ? t.addSchedule : t.addRecord}
-            </button>
+            <div className="flex gap-2">
+              {/* PLAN 타입일 때만 즐겨찾기 저장 버튼 표시 */}
+              {isPlan && onSaveFavorite && (
+                <button
+                  onClick={() => {
+                    if (!title.trim() || totalMin <= 0) return;
+                    onSaveFavorite(title.trim(), totalMin);
+                  }}
+                  disabled={!title.trim() || totalMin <= 0}
+                  title={t.favoriteAdd}
+                  className="px-3 py-2.5 border border-yellow-300 dark:border-yellow-700 text-yellow-500 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 disabled:opacity-40 rounded-lg transition-colors flex-shrink-0"
+                >
+                  <Star className="w-4 h-4" />
+                </button>
+              )}
+              <button
+                onClick={handleSubmit}
+                disabled={!title.trim() || totalMin <= 0}
+                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white text-sm font-semibold rounded-lg transition-colors"
+              >
+                {isPlan ? t.addSchedule : t.addRecord}
+              </button>
+            </div>
           </div>
         </Dialog.Content>
       </Dialog.Portal>

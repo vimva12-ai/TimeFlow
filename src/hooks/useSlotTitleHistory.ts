@@ -45,5 +45,12 @@ export function useSlotTitleHistory() {
     return history.filter((t) => t.toLowerCase().includes(lower));
   }, []);
 
-  return { addTitle, getSuggestions };
+  /** 히스토리에서 특정 제목을 제거 */
+  const removeTitle = useCallback((title: string) => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    writeHistory(readHistory().filter((t) => t !== trimmed));
+  }, []);
+
+  return { addTitle, getSuggestions, removeTitle };
 }

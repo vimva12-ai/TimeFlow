@@ -69,6 +69,22 @@ export interface Template {
   created_at: string;
 }
 
+// ── plan_favorites ─────────────────────────────────────────────
+export interface PlanFavorite {
+  id: string;
+  uid: string;
+  title: string;
+  durationMinutes: number;
+  sort_order: number;
+  created_at: string;
+}
+
+// ── memos ──────────────────────────────────────────────────────
+export interface MemoNote {
+  text: string;
+  updated_at: string;
+}
+
 // ── Composite types ───────────────────────────────────────────
 export type TimeSlotWithLogs = TimeSlot & {
   actual_logs: ActualLog[];

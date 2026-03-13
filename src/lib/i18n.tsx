@@ -140,6 +140,16 @@ const translations = {
     todoUnpinItem: '고정 해제',
     todoConfirmDeleteItem: '이 할 일을 삭제할까요?',
     todoConfirmReset: '오늘 할 일 목록을 모두 초기화할까요?',
+    todoMissed: '미달성',
+    memoTitle: '메모',
+    memoPlaceholder: '빠른 메모...',
+    memoSaved: '저장됨',
+    favoritePlans: '즐겨찾기',
+    favoriteAdd: '즐겨찾기에 추가',
+    favoriteEmpty: '즐겨찾기 없음',
+    favoriteDragHint: '드래그하여 PLAN에 추가',
+    termsAlreadyAgreed: '이미 약관에 동의하셨습니다.',
+    reviewTerms: '약관 보기',
   },
   en: {
     save: 'Save',
@@ -261,6 +271,16 @@ const translations = {
     todoUnpinItem: 'Unpin',
     todoConfirmDeleteItem: 'Delete this task?',
     todoConfirmReset: 'Reset all tasks for today?',
+    todoMissed: 'Missed',
+    memoTitle: 'Memo',
+    memoPlaceholder: 'Quick note...',
+    memoSaved: 'Saved',
+    favoritePlans: 'Favorites',
+    favoriteAdd: 'Add Favorite',
+    favoriteEmpty: 'No favorites yet',
+    favoriteDragHint: 'Drag to add to PLAN',
+    termsAlreadyAgreed: 'Already agreed to terms.',
+    reviewTerms: 'View Terms',
   },
   ja: {
     save: '保存',
@@ -382,6 +402,16 @@ const translations = {
     todoUnpinItem: '固定解除',
     todoConfirmDeleteItem: 'このタスクを削除しますか？',
     todoConfirmReset: '今日のタスクをすべてリセットしますか？',
+    todoMissed: '未達成',
+    memoTitle: 'メモ',
+    memoPlaceholder: 'メモ...',
+    memoSaved: '保存済み',
+    favoritePlans: 'お気に入り',
+    favoriteAdd: 'お気に入りに追加',
+    favoriteEmpty: 'お気に入りがありません',
+    favoriteDragHint: 'ドラッグしてPLANに追加',
+    termsAlreadyAgreed: '規約に同意済みです。',
+    reviewTerms: '規約を見る',
   },
 } as const;
 
@@ -506,6 +536,16 @@ export interface Translations {
   todoUnpinItem: string;
   todoConfirmDeleteItem: string;
   todoConfirmReset: string;
+  todoMissed: string;
+  memoTitle: string;
+  memoPlaceholder: string;
+  memoSaved: string;
+  favoritePlans: string;
+  favoriteAdd: string;
+  favoriteEmpty: string;
+  favoriteDragHint: string;
+  termsAlreadyAgreed: string;
+  reviewTerms: string;
 }
 
 interface I18nContextValue {

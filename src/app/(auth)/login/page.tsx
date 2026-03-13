@@ -1,22 +1,31 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '@/lib/firebase/client';
 import { analytics } from '@/lib/analytics';
 
+const TERMS_KEY = 'timeflow-terms-agreed';
+
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
-  // 약관 동의 체크박스 상태
+  // 이미 동의한 사용자 여부 (localStorage 확인)
+  const [alreadyAgreed, setAlreadyAgreed] = useState(false);
+  // 신규 사용자용 약관 동의 체크박스 상태
   const [agreedPrivacy, setAgreedPrivacy] = useState(false);
   const [agreedTerms, setAgreedTerms] = useState(false);
 
-  // 두 체크박스 모두 체크해야 로그인 버튼 활성화
-  const canLogin = agreedPrivacy && agreedTerms;
+  // 클라이언트 사이드에서만 localStorage 접근
+  useEffect(() => {
+    setAlreadyAgreed(localStorage.getItem(TERMS_KEY) === 'true');
+  }, []);
+
+  // 이미 동의했거나 두 체크박스 모두 체크하면 로그인 버튼 활성화
+  const canLogin = alreadyAgreed || (agreedPrivacy && agreedTerms);
 
   async function handleGoogleLogin() {
     if (!canLogin) return;
@@ -30,6 +39,8 @@ export default function LoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken }),
       });
+      // 약관 동의 상태 저장 (다음 로그인 시 체크박스 생략)
+      localStorage.setItem(TERMS_KEY, 'true');
       analytics.login('google');
       router.push('/today');
     } catch (err: unknown) {
@@ -47,74 +58,90 @@ export default function LoginPage() {
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Plan vs Actual 타임 트래커</p>
         </div>
 
-        {/* 약관 동의 체크박스 */}
-        <div className="space-y-3">
-          <label className="flex items-start gap-3 cursor-pointer group">
-            <div className="relative mt-0.5 flex-shrink-0">
-              <input
-                type="checkbox"
-                checked={agreedPrivacy}
-                onChange={(e) => setAgreedPrivacy(e.target.checked)}
-                className="sr-only"
-              />
-              <div className={`w-4.5 h-4.5 w-[18px] h-[18px] rounded border-2 flex items-center justify-center transition-colors ${
-                agreedPrivacy
-                  ? 'bg-blue-600 border-blue-600'
-                  : 'border-gray-300 dark:border-gray-600 group-hover:border-blue-400 dark:group-hover:border-blue-500'
-              }`}>
-                {agreedPrivacy && (
-                  <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-              </div>
+        {/* 약관 동의 섹션: 이미 동의한 사용자는 간소화 표시 */}
+        {alreadyAgreed ? (
+          <div className="flex items-center justify-between px-1 py-2 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="text-sm text-green-700 dark:text-green-300">이미 약관에 동의하셨습니다.</span>
             </div>
-            <span className="text-sm text-gray-700 dark:text-gray-300 leading-tight">
-              <Link
-                href="/privacy"
-                target="_blank"
-                className="text-blue-500 hover:text-blue-600 hover:underline font-medium"
-                onClick={(e) => e.stopPropagation()}
-              >
-                개인정보처리방침
-              </Link>
-              에 동의합니다
-            </span>
-          </label>
+            <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+              <Link href="/privacy" target="_blank" className="hover:underline">개인정보</Link>
+              <span>·</span>
+              <Link href="/terms" target="_blank" className="hover:underline">이용약관</Link>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <div className="relative mt-0.5 flex-shrink-0">
+                <input
+                  type="checkbox"
+                  checked={agreedPrivacy}
+                  onChange={(e) => setAgreedPrivacy(e.target.checked)}
+                  className="sr-only"
+                />
+                <div className={`w-[18px] h-[18px] rounded border-2 flex items-center justify-center transition-colors ${
+                  agreedPrivacy
+                    ? 'bg-blue-600 border-blue-600'
+                    : 'border-gray-300 dark:border-gray-600 group-hover:border-blue-400 dark:group-hover:border-blue-500'
+                }`}>
+                  {agreedPrivacy && (
+                    <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+              </div>
+              <span className="text-sm text-gray-700 dark:text-gray-300 leading-tight">
+                <Link
+                  href="/privacy"
+                  target="_blank"
+                  className="text-blue-500 hover:text-blue-600 hover:underline font-medium"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  개인정보처리방침
+                </Link>
+                에 동의합니다
+              </span>
+            </label>
 
-          <label className="flex items-start gap-3 cursor-pointer group">
-            <div className="relative mt-0.5 flex-shrink-0">
-              <input
-                type="checkbox"
-                checked={agreedTerms}
-                onChange={(e) => setAgreedTerms(e.target.checked)}
-                className="sr-only"
-              />
-              <div className={`w-[18px] h-[18px] rounded border-2 flex items-center justify-center transition-colors ${
-                agreedTerms
-                  ? 'bg-blue-600 border-blue-600'
-                  : 'border-gray-300 dark:border-gray-600 group-hover:border-blue-400 dark:group-hover:border-blue-500'
-              }`}>
-                {agreedTerms && (
-                  <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <div className="relative mt-0.5 flex-shrink-0">
+                <input
+                  type="checkbox"
+                  checked={agreedTerms}
+                  onChange={(e) => setAgreedTerms(e.target.checked)}
+                  className="sr-only"
+                />
+                <div className={`w-[18px] h-[18px] rounded border-2 flex items-center justify-center transition-colors ${
+                  agreedTerms
+                    ? 'bg-blue-600 border-blue-600'
+                    : 'border-gray-300 dark:border-gray-600 group-hover:border-blue-400 dark:group-hover:border-blue-500'
+                }`}>
+                  {agreedTerms && (
+                    <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
               </div>
-            </div>
-            <span className="text-sm text-gray-700 dark:text-gray-300 leading-tight">
-              <Link
-                href="/terms"
-                target="_blank"
-                className="text-blue-500 hover:text-blue-600 hover:underline font-medium"
-                onClick={(e) => e.stopPropagation()}
-              >
-                이용약관
-              </Link>
-              에 동의합니다
-            </span>
-          </label>
-        </div>
+              <span className="text-sm text-gray-700 dark:text-gray-300 leading-tight">
+                <Link
+                  href="/terms"
+                  target="_blank"
+                  className="text-blue-500 hover:text-blue-600 hover:underline font-medium"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  이용약관
+                </Link>
+                에 동의합니다
+              </span>
+            </label>
+          </div>
+        )}
 
         {/* 구글 로그인 버튼 */}
         <button

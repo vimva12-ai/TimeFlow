@@ -79,9 +79,11 @@ export interface PlanFavorite {
   created_at: string;
 }
 
-// ── memos ──────────────────────────────────────────────────────
-export interface MemoNote {
+// ── memo_items ─────────────────────────────────────────────────
+export interface MemoItem {
+  id: string;
   text: string;
+  created_at: string;
   updated_at: string;
 }
 

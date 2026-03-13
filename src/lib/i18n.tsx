@@ -144,6 +144,11 @@ const translations = {
     memoTitle: '메모',
     memoPlaceholder: '빠른 메모...',
     memoSaved: '저장됨',
+    memoList: '저장된 메모',
+    memoNew: '새 메모',
+    memoUpdate: '수정 저장',
+    memoConfirmDelete: '이 메모를 삭제할까요?',
+    memoEditBtn: '편집',
     favoritePlans: '즐겨찾기',
     favoriteAdd: '즐겨찾기에 추가',
     favoriteEmpty: '즐겨찾기 없음',
@@ -275,6 +280,11 @@ const translations = {
     memoTitle: 'Memo',
     memoPlaceholder: 'Quick note...',
     memoSaved: 'Saved',
+    memoList: 'Saved Memos',
+    memoNew: 'New',
+    memoUpdate: 'Update',
+    memoConfirmDelete: 'Delete this memo?',
+    memoEditBtn: 'Edit',
     favoritePlans: 'Favorites',
     favoriteAdd: 'Add Favorite',
     favoriteEmpty: 'No favorites yet',
@@ -406,6 +416,11 @@ const translations = {
     memoTitle: 'メモ',
     memoPlaceholder: 'メモ...',
     memoSaved: '保存済み',
+    memoList: '保存済みメモ',
+    memoNew: '新しいメモ',
+    memoUpdate: '更新',
+    memoConfirmDelete: 'このメモを削除しますか？',
+    memoEditBtn: '編集',
     favoritePlans: 'お気に入り',
     favoriteAdd: 'お気に入りに追加',
     favoriteEmpty: 'お気に入りがありません',
@@ -540,6 +555,11 @@ export interface Translations {
   memoTitle: string;
   memoPlaceholder: string;
   memoSaved: string;
+  memoList: string;
+  memoNew: string;
+  memoUpdate: string;
+  memoConfirmDelete: string;
+  memoEditBtn: string;
   favoritePlans: string;
   favoriteAdd: string;
   favoriteEmpty: string;

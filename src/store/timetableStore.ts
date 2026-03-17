@@ -8,6 +8,9 @@ interface TimetableState {
   setSelectedDate: (date: string) => void;
   editingSlotId: string | null;
   setEditingSlotId: (id: string | null) => void;
+  // 할 일 사이드바 → PLAN 모달 연동: 할 일 추가 시 PLAN 모달을 열기 위한 pending 상태
+  pendingTodoForPlan: { text: string; todoId: string } | null;
+  setPendingTodoForPlan: (data: { text: string; todoId: string } | null) => void;
 
   // 그리드 설정 (localStorage 영구저장)
   startHour: number;   // 시작 시간 (기본: 5)
@@ -25,6 +28,8 @@ export const useTimetableStore = create<TimetableState>()(
       setSelectedDate: (date) => set({ selectedDate: date }),
       editingSlotId: null,
       setEditingSlotId: (id) => set({ editingSlotId: id }),
+      pendingTodoForPlan: null,
+      setPendingTodoForPlan: (data) => set({ pendingTodoForPlan: data }),
 
       startHour: 5,
       endHour: 24,

@@ -16,6 +16,7 @@ interface AddSlotModalProps {
   onCreateActual: (start: string, end: string, title: string) => void;
   initialHour?: number;
   initialMin?: number;
+  initialTitle?: string;  // 할 일 연동 시 제목 사전 입력
   // PLAN 즐겨찾기 저장 콜백 (PLAN 타입에서만 표시)
   onSaveFavorite?: (title: string, durationMinutes: number) => void;
 }
@@ -31,7 +32,7 @@ function hm(val: string): { h: number; m: number } {
 
 export default function AddSlotModal({
   type, open, onClose, date, onCreatePlan, onCreateActual,
-  initialHour, initialMin, onSaveFavorite,
+  initialHour, initialMin, initialTitle, onSaveFavorite,
 }: AddSlotModalProps) {
   const { t } = useI18n();
   const { addTitle, getSuggestions, removeTitle } = useSlotTitleHistory();
@@ -57,7 +58,7 @@ export default function AddSlotModal({
     if (open) {
       const h = initialHour ?? new Date().getHours();
       const m = initialMin ?? (new Date().getMinutes() < 30 ? 0 : 30);
-      setTitle('');
+      setTitle(initialTitle ?? '');
       setShowSuggestions(false);
       setSuggestions([]);
       setActiveIdx(-1);
@@ -72,7 +73,7 @@ export default function AddSlotModal({
       setDirectStart(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
       setDirectEnd(`${String(eH).padStart(2, '0')}:${String(eM).padStart(2, '0')}`);
     }
-  }, [open, initialHour, initialMin]);
+  }, [open, initialHour, initialMin, initialTitle]);
 
   function toggleDirect() {
     if (!directInput) {

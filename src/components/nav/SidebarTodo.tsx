@@ -30,15 +30,13 @@ function generateId() {
 interface SidebarTodoProps {
   // 할 일 체크/해제 시 외부에서 슬롯 상태를 동기화하는 콜백 (PLAN-Todo 연동)
   onToggle?: (item: TodoItem, newChecked: boolean) => void;
-  // 새 할 일 추가 시 PLAN 슬롯도 생성하는 콜백
-  onAddItem?: (text: string, todoId: string) => void;
 }
 
-export default function SidebarTodo({ onToggle, onAddItem }: SidebarTodoProps = {}) {
+export default function SidebarTodo({ onToggle }: SidebarTodoProps = {}) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   // 선택된 날짜를 Zustand 스토어에서 가져와 해당 날짜의 할 일 표시
-  const { selectedDate, setSelectedDate } = useTimetableStore();
+  const { selectedDate, setSelectedDate, setPendingTodoForPlan } = useTimetableStore();
   const { items, isLoading, save } = useTodo(selectedDate);
 
   // 오늘/과거 날짜 여부
@@ -102,10 +100,10 @@ export default function SidebarTodo({ onToggle, onAddItem }: SidebarTodoProps = 
     const text = inputText.trim();
     if (!text || items.length >= MAX_ITEMS) return;
     const newId = generateId();
-    save([...items, { id: newId, text, checked: false }]);
     setInputText('');
-    // PLAN 슬롯도 함께 생성 (AppClientLayout에서 처리)
-    onAddItem?.(text, newId);
+    // 할 일 저장은 PLAN 모달 확인 후 처리 (취소 시 미생성)
+    // today/page.tsx가 pendingTodoForPlan을 감지해 AddSlotModal을 오픈
+    setPendingTodoForPlan({ text, todoId: newId });
   }
 
   function toggleItem(id: string) {

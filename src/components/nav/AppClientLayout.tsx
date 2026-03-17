@@ -15,17 +15,13 @@ import SidebarTodo from '@/components/nav/SidebarTodo';
 import SidebarMemo from '@/components/nav/SidebarMemo';
 import { useTimetableStore } from '@/store/timetableStore';
 import { useSlotMutations } from '@/hooks/useSlotMutations';
-import { useTodo, type TodoItem } from '@/hooks/useTodo';
-import { useQueryClient } from '@tanstack/react-query';
-import { addMinutes, format } from 'date-fns';
+import { type TodoItem } from '@/hooks/useTodo';
 
 export default function AppClientLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const router = useRouter();
   const { selectedDate } = useTimetableStore();
-  const { updateSlotStatus, createSlot } = useSlotMutations(selectedDate);
-  const { save: saveTodo } = useTodo(selectedDate);
-  const queryClient = useQueryClient();
+  const { updateSlotStatus } = useSlotMutations(selectedDate);
 
   // 할 일 체크/해제 시 연결된 슬롯 상태 동기화
   // 체크 → 슬롯 'done', 해제 → 슬롯 'planned'으로 되돌림
@@ -35,34 +31,6 @@ export default function AppClientLayout({ children }: { children: React.ReactNod
       slotId: item.linkedSlotId,
       status: newChecked ? 'done' : 'planned',
     });
-  }
-
-  // 새 할 일 추가 시 PLAN 슬롯 자동 생성
-  // 오늘: 현재 시각 기준 다음 30분 경계 / 다른 날짜: 09:00 기본값
-  function handleTodoAdd(text: string, todoId: string) {
-    const now = new Date();
-    const todayStr = format(now, 'yyyy-MM-dd');
-    let startStr: string;
-    if (selectedDate === todayStr) {
-      // 현재 분이 0~29이면 :30, 30~59이면 다음 시간 :00
-      const h = now.getMinutes() < 30 ? now.getHours() : now.getHours() + 1;
-      const m = now.getMinutes() < 30 ? 30 : 0;
-      startStr = `${selectedDate}T${String(h % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
-    } else {
-      startStr = `${selectedDate}T09:00:00`;
-    }
-    const start = new Date(startStr).toISOString();
-    const end = addMinutes(new Date(start), 30).toISOString();
-    createSlot.mutate(
-      { title: text, start_at: start, end_at: end, status: 'planned', sort_order: 0, linkedTodoId: todoId },
-      {
-        onSuccess: (slot) => {
-          // 생성된 슬롯 ID를 할 일 항목에 역방향으로 연결
-          const current = queryClient.getQueryData<TodoItem[]>(['todo', selectedDate]) ?? [];
-          saveTodo(current.map((t) => t.id === todoId ? { ...t, linkedSlotId: slot.id } : t));
-        },
-      }
-    );
   }
 
   // Firebase 로그아웃 + 세션 쿠키 삭제 후 로그인 페이지로 이동
@@ -136,7 +104,7 @@ export default function AppClientLayout({ children }: { children: React.ReactNod
             <SidebarPomodoro />
           </div>
           <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
-            <SidebarTodo onToggle={handleTodoToggle} onAddItem={handleTodoAdd} />
+            <SidebarTodo onToggle={handleTodoToggle} />
           </div>
           <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
             <SidebarMemo />
@@ -167,7 +135,7 @@ export default function AppClientLayout({ children }: { children: React.ReactNod
             <SidebarPomodoro />
           </div>
           <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
-            <SidebarTodo onToggle={handleTodoToggle} onAddItem={handleTodoAdd} />
+            <SidebarTodo onToggle={handleTodoToggle} />
           </div>
           <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
             <SidebarMemo />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTimetableStore } from '@/store/timetableStore';
 import { useDailyPlan } from '@/hooks/useDailyPlan';
 import { useSlotMutations } from '@/hooks/useSlotMutations';
@@ -32,10 +32,12 @@ interface ModalState {
   type: 'plan' | 'actual';
   initialHour?: number;
   initialMin?: number;
+  initialTitle?: string;   // 할 일에서 열릴 때 사전 입력 제목
+  pendingTodoId?: string;  // 할 일에서 열릴 때 연결할 todo ID
 }
 
 export default function TodayPage() {
-  const { selectedDate } = useTimetableStore();
+  const { selectedDate, pendingTodoForPlan, setPendingTodoForPlan } = useTimetableStore();
   const { data: plan, isLoading } = useDailyPlan(selectedDate);
   const { createSlot, updateSlotStatus, logActual, createActualEntry, updateActualLog, updateSlotTime, updateActualDispTime } = useSlotMutations(selectedDate);
   const { data: weeklyReport } = useWeeklyReport();
@@ -50,21 +52,41 @@ export default function TodayPage() {
   // 즐겨찾기 패널 표시 여부
   const [favoritesOpen, setFavoritesOpen] = useState(false);
 
+  // 사이드바 할 일 추가 → PLAN 모달 자동 오픈
+  useEffect(() => {
+    if (pendingTodoForPlan) {
+      setModal({
+        type: 'plan',
+        initialTitle: pendingTodoForPlan.text,
+        pendingTodoId: pendingTodoForPlan.todoId,
+      });
+    }
+  }, [pendingTodoForPlan]);
+
   const weeklyAvg = weeklyReport
     ? Math.round(weeklyReport.reduce((a, d) => a + d.completionRate, 0) / weeklyReport.length)
     : null;
 
   function handleCreateSlot(start: string, end: string, title: string) {
     if (!plan) return;
-    // 새 할 일 ID를 미리 생성해 슬롯-할 일을 양방향으로 연결
-    const newTodoId = Math.random().toString(36).slice(2, 10);
+    // 할 일 사이드바에서 열린 경우: 기존 todoId 사용 (todo 저장 포함)
+    // 일반 PLAN 추가: 새 todoId 생성 (자동으로 할 일도 추가)
+    const todoId = modal?.pendingTodoId ?? Math.random().toString(36).slice(2, 10);
+    const isFromTodo = !!modal?.pendingTodoId;
     createSlot.mutate(
-      { title, start_at: start, end_at: end, status: 'planned', sort_order: plan.time_slots.length, linkedTodoId: newTodoId },
+      { title, start_at: start, end_at: end, status: 'planned', sort_order: plan.time_slots.length, linkedTodoId: todoId },
       {
         onSuccess: (slot) => {
-          // 현재 캐시에서 최신 할 일 목록을 가져와 새 항목 추가
           const current = queryClient.getQueryData<TodoItem[]>(['todo', selectedDate]) ?? [];
-          saveTodo([...current, { id: newTodoId, text: title, checked: false, linkedSlotId: slot.id }]);
+          if (isFromTodo) {
+            // 할 일 사이드바에서 왔을 때: 이 시점에 todo 저장 (모달 확인 = todo 확정)
+            // title은 모달에서 수정됐을 수 있으므로 최신 title 사용
+            saveTodo([...current, { id: todoId, text: title, checked: false, linkedSlotId: slot.id }]);
+            setPendingTodoForPlan(null);
+          } else {
+            // 일반 PLAN 추가: 자동으로 연결된 할 일 항목 추가
+            saveTodo([...current, { id: todoId, text: title, checked: false, linkedSlotId: slot.id }]);
+          }
         },
       }
     );
@@ -298,12 +320,17 @@ export default function TodayPage() {
       <AddSlotModal
         type={modal?.type ?? 'plan'}
         open={modal !== null}
-        onClose={() => setModal(null)}
+        onClose={() => {
+          setModal(null);
+          // 할 일에서 열린 모달을 취소한 경우 pending 상태 클리어 (todo 미생성)
+          if (pendingTodoForPlan) setPendingTodoForPlan(null);
+        }}
         date={selectedDate}
         onCreatePlan={handleCreateSlot}
         onCreateActual={handleCreateActual}
         initialHour={modal?.initialHour}
         initialMin={modal?.initialMin}
+        initialTitle={modal?.initialTitle}
         onSaveFavorite={(title, durationMinutes) =>
           addFavorite.mutate({ title, durationMinutes })
         }

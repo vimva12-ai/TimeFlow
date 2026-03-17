@@ -7,6 +7,8 @@ import { format, parseISO } from 'date-fns';
 import { useTimetableStore } from '@/store/timetableStore';
 import { type TimeSlotWithLogs, type SlotStatus } from '@/types/database';
 import { useSlotMutations } from '@/hooks/useSlotMutations';
+import { useTodo, type TodoItem } from '@/hooks/useTodo';
+import { useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
 
 interface SlotEditModalProps {
@@ -17,6 +19,8 @@ interface SlotEditModalProps {
 export default function SlotEditModal({ slots, date }: SlotEditModalProps) {
   const { editingSlotId, setEditingSlotId } = useTimetableStore();
   const { updateSlotStatus, updateSlotTitle, deleteSlot, updateSlotTime } = useSlotMutations(date);
+  const { save: saveTodo } = useTodo(date);
+  const queryClient = useQueryClient();
   const { t } = useI18n();
 
   const slot = slots.find((s) => s.id === editingSlotId) ?? null;
@@ -46,7 +50,17 @@ export default function SlotEditModal({ slots, date }: SlotEditModalProps) {
   function handleSave() {
     if (!slot) return;
     if (title !== slot.title) updateSlotTitle.mutate({ slotId: slot.id, title });
-    if (status !== slot.status) updateSlotStatus.mutate({ slotId: slot.id, status });
+    if (status !== slot.status) {
+      updateSlotStatus.mutate({ slotId: slot.id, status });
+      // 완료/부분완료로 변경 시 연결된 할 일 체크
+      if ((status === 'done' || status === 'partial') && slot.linkedTodoId) {
+        const current = queryClient.getQueryData<TodoItem[]>(['todo', date]) ?? [];
+        const todo = current.find((t) => t.id === slot.linkedTodoId);
+        if (todo && !todo.checked) {
+          saveTodo(current.map((t) => t.id === slot.linkedTodoId ? { ...t, checked: true } : t));
+        }
+      }
+    }
     const origStart = format(parseISO(slot.start_at), 'HH:mm');
     const origEnd = format(parseISO(slot.end_at), 'HH:mm');
     if ((startVal && endVal) && (startVal !== origStart || endVal !== origEnd)) {
@@ -62,6 +76,11 @@ export default function SlotEditModal({ slots, date }: SlotEditModalProps) {
 
   function handleDelete() {
     if (!slot) return;
+    // 연결된 할 일도 함께 삭제
+    if (slot.linkedTodoId) {
+      const current = queryClient.getQueryData<TodoItem[]>(['todo', date]) ?? [];
+      saveTodo(current.filter((t) => t.id !== slot.linkedTodoId));
+    }
     deleteSlot.mutate(slot.id);
     setEditingSlotId(null);
   }

@@ -34,6 +34,8 @@ export interface TimeSlot {
   // ACTUAL 전용 표시 위치 (PLAN과 독립적으로 이동 가능, 미수행 슬롯용)
   actual_disp_start?: string;
   actual_disp_end?: string;
+  // 할 일 연동: 연결된 TodoItem의 id
+  linkedTodoId?: string;
 }
 
 export type TimeSlotInsert = {
@@ -42,6 +44,7 @@ export type TimeSlotInsert = {
   end_at: string;
   status?: SlotStatus;
   sort_order?: number;
+  linkedTodoId?: string;
 };
 
 // ── actual_logs ───────────────────────────────────────────────

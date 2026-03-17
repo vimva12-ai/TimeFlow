@@ -27,7 +27,12 @@ function generateId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-export default function SidebarTodo() {
+interface SidebarTodoProps {
+  // 할 일 체크/해제 시 외부에서 슬롯 상태를 동기화하는 콜백 (PLAN-Todo 연동)
+  onToggle?: (item: TodoItem, newChecked: boolean) => void;
+}
+
+export default function SidebarTodo({ onToggle }: SidebarTodoProps = {}) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   // 선택된 날짜를 Zustand 스토어에서 가져와 해당 날짜의 할 일 표시
@@ -123,6 +128,8 @@ export default function SidebarTodo() {
       }
     }
     save(newItems);
+    // 외부 슬롯 상태 동기화 (AppClientLayout에서 ACTUAL 완료/미완료 처리)
+    onToggle?.(item, newChecked);
   }
 
   function togglePin(id: string) {
@@ -190,10 +197,11 @@ export default function SidebarTodo() {
     e.dataTransfer.effectAllowed = 'copyMove';
     dragSourceId.current = id;
     setDraggingId(id);
-    // PLAN 컬럼에서 드롭 감지할 수 있도록 할 일 제목 데이터 설정
+    // PLAN 컬럼에서 드롭 감지할 수 있도록 할 일 제목·ID 데이터 설정
     const item = items.find((i) => i.id === id);
     if (item) {
       e.dataTransfer.setData('text/x-todo-title', item.text);
+      e.dataTransfer.setData('text/x-todo-id', item.id);
     }
   }
 

@@ -32,6 +32,7 @@ export function useSlotMutations(date: string) {
         status: slotData.status ?? 'planned',
         sort_order: slotData.sort_order ?? 0,
         created_at: serverTimestamp(),
+        ...(slotData.linkedTodoId ? { linkedTodoId: slotData.linkedTodoId } : {}),
       });
       return {
         id: docRef.id,

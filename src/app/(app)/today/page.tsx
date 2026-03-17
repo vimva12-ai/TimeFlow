@@ -6,6 +6,7 @@ import { useDailyPlan } from '@/hooks/useDailyPlan';
 import { useSlotMutations } from '@/hooks/useSlotMutations';
 import { useWeeklyReport } from '@/hooks/useWeeklyReport';
 import { usePlanFavorites } from '@/hooks/usePlanFavorites';
+import { useTodo, type TodoItem } from '@/hooks/useTodo';
 import { useQueryClient } from '@tanstack/react-query';
 import { format, addDays, addMinutes, parseISO } from 'date-fns';
 import AchievementBadges from '@/components/stats/AchievementBadges';
@@ -39,6 +40,7 @@ export default function TodayPage() {
   const { createSlot, updateSlotStatus, logActual, createActualEntry, updateActualLog, updateSlotTime, updateActualDispTime } = useSlotMutations(selectedDate);
   const { data: weeklyReport } = useWeeklyReport();
   const { addFavorite } = usePlanFavorites();
+  const { save: saveTodo } = useTodo(selectedDate);
   const queryClient = useQueryClient();
   const stats = calcStats(plan);
   const { t } = useI18n();
@@ -54,7 +56,18 @@ export default function TodayPage() {
 
   function handleCreateSlot(start: string, end: string, title: string) {
     if (!plan) return;
-    createSlot.mutate({ title, start_at: start, end_at: end, status: 'planned', sort_order: plan.time_slots.length });
+    // 새 할 일 ID를 미리 생성해 슬롯-할 일을 양방향으로 연결
+    const newTodoId = Math.random().toString(36).slice(2, 10);
+    createSlot.mutate(
+      { title, start_at: start, end_at: end, status: 'planned', sort_order: plan.time_slots.length, linkedTodoId: newTodoId },
+      {
+        onSuccess: (slot) => {
+          // 현재 캐시에서 최신 할 일 목록을 가져와 새 항목 추가
+          const current = queryClient.getQueryData<TodoItem[]>(['todo', selectedDate]) ?? [];
+          saveTodo([...current, { id: newTodoId, text: title, checked: false, linkedSlotId: slot.id }]);
+        },
+      }
+    );
   }
 
   function handleCreateActual(start: string, end: string, title: string) {
@@ -69,6 +82,15 @@ export default function TodayPage() {
   async function handleComplete(slotId: string, status: SlotStatus, end: string) {
     updateSlotStatus.mutate({ slotId, status });
     const slot = plan?.time_slots.find((s) => s.id === slotId);
+    // 연결된 할 일이 있으면 완료/부분완료 시 체크 처리
+    if (slot?.linkedTodoId && (status === 'done' || status === 'partial')) {
+      const current = queryClient.getQueryData<TodoItem[]>(['todo', selectedDate]) ?? [];
+      const todo = current.find((t) => t.id === slot.linkedTodoId);
+      if (todo && !todo.checked) {
+        const others = current.filter((t) => t.id !== todo.id);
+        saveTodo([...others, { ...todo, checked: true }]);
+      }
+    }
     const log = slot?.actual_logs[0];
     if (log?.actual_start) {
       const uid = auth.currentUser?.uid ?? '';
@@ -103,14 +125,24 @@ export default function TodayPage() {
     alert(t.carryOverDone(carry.length));
   }
 
-  /** 사이드바 할 일 → PLAN 드롭: 해당 시간에 1시간짜리 슬롯 생성 */
-  function handleTodoDrop(h: number, m: number, title: string) {
+  /** 사이드바 할 일 → PLAN 드롭: 해당 시간에 1시간짜리 슬롯 생성 + 할 일 연동 */
+  function handleTodoDrop(h: number, m: number, title: string, todoId?: string) {
     if (!plan) return;
     const start = new Date(
       `${selectedDate}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`,
     ).toISOString();
     const end = addMinutes(new Date(start), 60).toISOString();
-    createSlot.mutate({ title, start_at: start, end_at: end, status: 'planned', sort_order: plan.time_slots.length });
+    createSlot.mutate(
+      { title, start_at: start, end_at: end, status: 'planned', sort_order: plan.time_slots.length, linkedTodoId: todoId },
+      {
+        onSuccess: (slot) => {
+          if (!todoId) return;
+          // 드래그한 기존 할 일에 linkedSlotId 추가 (새 항목 생성 없이 연결만)
+          const current = queryClient.getQueryData<TodoItem[]>(['todo', selectedDate]) ?? [];
+          saveTodo(current.map((t) => t.id === todoId ? { ...t, linkedSlotId: slot.id } : t));
+        },
+      }
+    );
   }
 
   /** 즐겨찾기 → PLAN 드롭: 즐겨찾기의 지속 시간으로 슬롯 생성 */
@@ -213,7 +245,21 @@ export default function TodayPage() {
               slots={plan.time_slots}
               onStart={handleStart}
               onComplete={handleComplete}
-              onChangeStatus={(slotId, status) => updateSlotStatus.mutate({ slotId, status })}
+              onChangeStatus={(slotId, status) => {
+                updateSlotStatus.mutate({ slotId, status });
+                // 완료/부분완료 → 연결된 할 일 체크
+                if (status === 'done' || status === 'partial') {
+                  const slot = plan.time_slots.find((s) => s.id === slotId);
+                  if (slot?.linkedTodoId) {
+                    const current = queryClient.getQueryData<TodoItem[]>(['todo', selectedDate]) ?? [];
+                    const todo = current.find((t) => t.id === slot.linkedTodoId);
+                    if (todo && !todo.checked) {
+                      const others = current.filter((t) => t.id !== todo.id);
+                      saveTodo([...others, { ...todo, checked: true }]);
+                    }
+                  }
+                }
+              }}
               onUpdateLog={(slotId, logId, actualStart, actualEnd) =>
                 updateActualLog.mutate({ slotId, logId, actual_start: actualStart, actual_end: actualEnd })
               }

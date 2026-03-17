@@ -13,10 +13,25 @@ import NavLinks, { BottomNav } from '@/components/nav/NavLinks';
 import SidebarPomodoro from '@/components/nav/SidebarPomodoro';
 import SidebarTodo from '@/components/nav/SidebarTodo';
 import SidebarMemo from '@/components/nav/SidebarMemo';
+import { useTimetableStore } from '@/store/timetableStore';
+import { useSlotMutations } from '@/hooks/useSlotMutations';
+import { type TodoItem } from '@/hooks/useTodo';
 
 export default function AppClientLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const router = useRouter();
+  const { selectedDate } = useTimetableStore();
+  const { updateSlotStatus } = useSlotMutations(selectedDate);
+
+  // 할 일 체크/해제 시 연결된 슬롯 상태 동기화
+  // 체크 → 슬롯 'done', 해제 → 슬롯 'planned'으로 되돌림
+  function handleTodoToggle(item: TodoItem, newChecked: boolean) {
+    if (!item.linkedSlotId) return;
+    updateSlotStatus.mutate({
+      slotId: item.linkedSlotId,
+      status: newChecked ? 'done' : 'planned',
+    });
+  }
 
   // Firebase 로그아웃 + 세션 쿠키 삭제 후 로그인 페이지로 이동
   async function handleLogout() {
@@ -89,7 +104,7 @@ export default function AppClientLayout({ children }: { children: React.ReactNod
             <SidebarPomodoro />
           </div>
           <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
-            <SidebarTodo />
+            <SidebarTodo onToggle={handleTodoToggle} />
           </div>
           <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
             <SidebarMemo />
@@ -120,7 +135,7 @@ export default function AppClientLayout({ children }: { children: React.ReactNod
             <SidebarPomodoro />
           </div>
           <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
-            <SidebarTodo />
+            <SidebarTodo onToggle={handleTodoToggle} />
           </div>
           <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
             <SidebarMemo />

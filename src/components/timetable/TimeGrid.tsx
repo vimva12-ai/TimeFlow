@@ -67,7 +67,7 @@ interface TimeGridProps {
   onPlanCellClick?: (h: number, m: number) => void;
   onActualCellClick?: (h: number, m: number) => void;
   // 드래그 드롭: 할 일 → PLAN, 즐겨찾기 → PLAN
-  onTodoDrop?: (h: number, m: number, title: string) => void;
+  onTodoDrop?: (h: number, m: number, title: string, todoId?: string) => void;
   onFavoriteDrop?: (h: number, m: number, title: string, durationMin: number) => void;
 }
 
@@ -227,11 +227,12 @@ export default function TimeGrid({
             if (!timeResult) return;
 
             const todoTitle = e.dataTransfer.getData('text/x-todo-title');
+            const todoId = e.dataTransfer.getData('text/x-todo-id') || undefined;
             const favoriteRaw = e.dataTransfer.getData('text/x-favorite');
 
             if (todoTitle && onTodoDrop) {
               e.preventDefault();
-              onTodoDrop(timeResult.h, timeResult.m, todoTitle);
+              onTodoDrop(timeResult.h, timeResult.m, todoTitle, todoId);
             } else if (favoriteRaw && onFavoriteDrop) {
               e.preventDefault();
               try {

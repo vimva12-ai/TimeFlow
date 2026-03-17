@@ -12,6 +12,7 @@ export interface TodoItem {
   text: string;
   checked: boolean;
   pinned?: boolean; // true이면 다음 날 할 일 목록에 체크 해제 상태로 자동 이월
+  linkedSlotId?: string; // 연결된 TimeSlot의 id (PLAN-Todo 연동)
 }
 
 interface TodoDoc {
